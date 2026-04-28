@@ -20,7 +20,7 @@ import type {
   ButtonPress,
   MessagingLogger,
 } from '../../types'
-import { formatForTelegram } from './format'
+import { formatForTelegram, splitTelegramMessages } from './format'
 
 /**
  * Hard cap for downloaded attachment size. Matches `MAX_FILE_SIZE` in
@@ -504,7 +504,16 @@ export class TelegramAdapter implements PlatformAdapter {
   async sendText(channelId: string, text: string): Promise<SentMessage> {
     if (!this.bot) throw new Error('Telegram adapter not initialized')
     const formatted = formatForTelegram(text)
-    const sent = await this.bot.api.sendMessage(Number(channelId), formatted)
+    const chunks = splitTelegramMessages(formatted)
+    const [firstChunk, ...rest] = chunks
+    const sent = await this.bot.api.sendMessage(Number(channelId), firstChunk ?? '', {
+      parse_mode: 'MarkdownV2',
+    })
+    for (const chunk of rest) {
+      await this.bot.api.sendMessage(Number(channelId), chunk, {
+        parse_mode: 'MarkdownV2',
+      })
+    }
     return {
       platform: 'telegram',
       channelId,
@@ -515,7 +524,10 @@ export class TelegramAdapter implements PlatformAdapter {
   async editMessage(channelId: string, messageId: string, text: string): Promise<void> {
     if (!this.bot) throw new Error('Telegram adapter not initialized')
     const formatted = formatForTelegram(text)
-    await this.bot.api.editMessageText(Number(channelId), Number(messageId), formatted)
+    const [firstChunk] = splitTelegramMessages(formatted)
+    await this.bot.api.editMessageText(Number(channelId), Number(messageId), firstChunk ?? '', {
+      parse_mode: 'MarkdownV2',
+    })
   }
 
   async sendButtons(channelId: string, text: string, buttons: InlineButton[]): Promise<SentMessage> {
@@ -528,7 +540,10 @@ export class TelegramAdapter implements PlatformAdapter {
       }]),
     }
 
-    const sent = await this.bot.api.sendMessage(Number(channelId), text, {
+    const formatted = formatForTelegram(text)
+    const [firstChunk] = splitTelegramMessages(formatted)
+    const sent = await this.bot.api.sendMessage(Number(channelId), firstChunk ?? '', {
+      parse_mode: 'MarkdownV2',
       reply_markup: keyboard,
     })
 

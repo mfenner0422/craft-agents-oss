@@ -1,4 +1,7 @@
 import { describe, it, expect, mock, beforeEach } from 'bun:test'
+import { mkdtempSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
 
 // Stub the preferences module so we can toggle `getCoAuthorPreference` per test
 // without touching disk. `formatPreferencesForPrompt` is stubbed to '' because
@@ -9,7 +12,7 @@ mock.module('../../config/preferences.ts', () => ({
   formatPreferencesForPrompt: () => '',
 }))
 
-import { getSystemPrompt } from '../system'
+import { buildRockySystemPrompt, getSystemPrompt } from '../system'
 
 const GIT_CONVENTIONS_HEADING = '## Git Conventions'
 const CO_AUTHOR_TRAILER = 'Co-Authored-By: Craft Agent <agents-noreply@craft.do>'
@@ -105,5 +108,36 @@ describe('includeCoAuthoredBy handling', () => {
 
     expect(prompt).toContain(GIT_CONVENTIONS_HEADING)
     expect(prompt).toContain(CO_AUTHOR_TRAILER)
+  })
+})
+
+describe('Rocky system prompt context', () => {
+  it('injects root Rocky files when present', () => {
+    const workspace = mkdtempSync(join(tmpdir(), 'rocky-system-'))
+    writeFileSync(join(workspace, 'AGENTS.md'), 'Operational harness')
+    writeFileSync(join(workspace, 'SOUL.md'), 'Persona shape')
+    writeFileSync(join(workspace, 'USER.md'), 'Micah profile')
+    writeFileSync(join(workspace, 'MEMORY.md'), 'Durable fact')
+
+    const prompt = getSystemPrompt(undefined, undefined, workspace, workspace)
+
+    expect(prompt).toContain('## Rocky Workspace Context')
+    expect(prompt).toContain('# AGENTS.md')
+    expect(prompt).toContain('Operational harness')
+    expect(prompt).toContain('# MEMORY.md')
+    expect(prompt).toContain('Durable fact')
+  })
+
+  it('ignores non-Rocky workspaces', () => {
+    const workspace = mkdtempSync(join(tmpdir(), 'plain-system-'))
+
+    expect(buildRockySystemPrompt(workspace)).toBe('')
+  })
+
+  it('rejects Rocky context above 10KB', () => {
+    const workspace = mkdtempSync(join(tmpdir(), 'rocky-large-system-'))
+    writeFileSync(join(workspace, 'MEMORY.md'), 'x'.repeat(11 * 1024))
+
+    expect(() => buildRockySystemPrompt(workspace)).toThrow('Rocky system prompt exceeds 10KB')
   })
 })

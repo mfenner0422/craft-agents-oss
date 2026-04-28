@@ -16,6 +16,12 @@ const MAX_CONTEXT_FILE_SIZE = 10 * 1024;
 /** Maximum number of context files to discover in monorepo */
 const MAX_CONTEXT_FILES = 30;
 
+/** Maximum combined Rocky persona/memory payload to append to the system prompt. */
+const MAX_ROCKY_PROMPT_SIZE = 10 * 1024;
+
+/** Root-level Rocky files injected into the static system prompt when present. */
+const ROCKY_SYSTEM_FILES = ['AGENTS.md', 'SOUL.md', 'USER.md', 'MEMORY.md'] as const;
+
 /**
  * Directories to exclude when searching for context files.
  * These are common build output, dependency, and cache directories.
@@ -88,6 +94,36 @@ export function invalidateContextFileCache(directory?: string): void {
     contextFileCache.clear();
     debug(`[contextFileCache] Cleared all cached entries`);
   }
+}
+
+/**
+ * Build Rocky's root-level persona/memory prompt extension.
+ *
+ * ClaudeAgent pins the returned system prompt components on the first chat in a
+ * session, so this content is frozen for that session and refreshed by starting
+ * a new session. Missing files are ignored so non-Rocky workspaces are
+ * unaffected.
+ */
+export function buildRockySystemPrompt(workspaceRootPath?: string): string {
+  if (!workspaceRootPath) return '';
+
+  const parts: string[] = [];
+  for (const file of ROCKY_SYSTEM_FILES) {
+    const filePath = join(workspaceRootPath, file);
+    if (!existsSync(filePath)) continue;
+    const content = readFileSync(filePath, 'utf8').trim();
+    if (content) {
+      parts.push(`# ${file}\n\n${content}`);
+    }
+  }
+
+  if (parts.length === 0) return '';
+
+  const prompt = `\n\n## Rocky Workspace Context\n\n${parts.join('\n\n---\n\n')}`;
+  if (prompt.length > MAX_ROCKY_PROMPT_SIZE) {
+    throw new Error(`Rocky system prompt exceeds 10KB: ${prompt.length}`);
+  }
+  return prompt;
 }
 
 /**
@@ -363,6 +399,7 @@ export function getSystemPrompt(
 
   // Get project context files for monorepo support (lives in system prompt for persistence across compaction)
   const projectContextFiles = getProjectContextFilesPrompt(workingDirectory);
+  const rockyContext = buildRockySystemPrompt(workspaceRootPath);
 
   // Fall back to the user's current preference when callers don't pin/pass a value,
   // so forgetting the argument can't silently re-enable the co-author trailer (see #576).
@@ -372,7 +409,7 @@ export function getSystemPrompt(
   // to enable prompt caching. The system prompt stays static and cacheable.
   // Safe Mode context is also in user messages for the same reason.
   const basePrompt = getCraftAssistantPrompt(workspaceRootPath, backendName, resolvedIncludeCoAuthoredBy);
-  const fullPrompt = `${basePrompt}${preferences}${debugContext}${projectContextFiles}`;
+  const fullPrompt = `${basePrompt}${rockyContext}${preferences}${debugContext}${projectContextFiles}`;
 
   debug('[getSystemPrompt] full prompt length:', fullPrompt.length);
 
