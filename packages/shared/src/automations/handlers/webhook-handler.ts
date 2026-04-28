@@ -1,7 +1,7 @@
 /**
- * WebhookHandler - Processes webhook actions for App events
+ * WebhookHandler - Processes webhook actions for automation events
  *
- * Subscribes to App events and executes HTTP webhook requests.
+ * Subscribes to App and Agent events and executes HTTP webhook requests.
  * Sends requests to configured HTTP/HTTPS endpoints with configurable
  * method, headers, and body format (JSON or raw).
  */
@@ -9,7 +9,7 @@
 import { createLogger } from '../../utils/debug.ts';
 import type { EventBus, BaseEventPayload } from '../event-bus.ts';
 import type { AutomationHandler, AutomationsConfigProvider } from './types.ts';
-import { APP_EVENTS, type AutomationEvent, type WebhookAction, type WebhookActionResult, type AppEvent } from '../types.ts';
+import type { AutomationEvent, WebhookAction, WebhookActionResult } from '../types.ts';
 import { matcherMatches, buildWebhookEnv, expandEnvVars } from '../utils.ts';
 import { executeWithRetry, redactUrl, isTransientFailure, createWebhookHistoryEntry, expandWebhookAction } from '../webhook-utils.ts';
 import { RetryScheduler } from '../retry-scheduler.ts';
@@ -119,7 +119,7 @@ export class WebhookHandler implements AutomationHandler {
   }
 
   /**
-   * Subscribe to App events on the bus.
+   * Subscribe to all automation events on the bus.
    */
   subscribe(bus: EventBus): void {
     this.bus = bus;
@@ -133,11 +133,6 @@ export class WebhookHandler implements AutomationHandler {
    * Handle an event by processing matching webhook actions.
    */
   private async handleEvent(event: AutomationEvent, payload: BaseEventPayload): Promise<void> {
-    // Only process App events for webhook actions
-    if (!APP_EVENTS.includes(event as AppEvent)) {
-      return;
-    }
-
     const matchers = this.configProvider.getMatchersForEvent(event);
     if (matchers.length === 0) return;
 
