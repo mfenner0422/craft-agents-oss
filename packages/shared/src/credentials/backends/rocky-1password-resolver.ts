@@ -19,7 +19,7 @@ function canResolveOnePassword(): boolean {
   return Boolean(process.env.OP_SERVICE_ACCOUNT_TOKEN || process.env.OP_CONNECT_TOKEN);
 }
 
-function resolveReference(value: string): string {
+export function resolveRockyOnePasswordValue(value: string): string {
   if (!canResolveOnePassword()) {
     throw new Error('Cannot resolve Rocky 1Password reference: OP_SERVICE_ACCOUNT_TOKEN is not set');
   }
@@ -36,7 +36,7 @@ export function resolveRockyOnePasswordReferences(credential: StoredCredential):
 
   for (const [key, value] of Object.entries(resolved)) {
     if (isRockyOnePasswordReference(value)) {
-      (resolved as unknown as Record<string, unknown>)[key] = resolveReference(value);
+      (resolved as unknown as Record<string, unknown>)[key] = resolveRockyOnePasswordValue(value);
     }
   }
 

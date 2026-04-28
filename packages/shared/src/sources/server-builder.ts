@@ -17,6 +17,7 @@ import { isSourceUsable } from './storage.ts';
 import { createApiServer, type SummarizeCallback } from './api-tools.ts';
 import { createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
 import { debug } from '../utils/debug.ts';
+import { isRockyOnePasswordReference, resolveRockyOnePasswordValue } from '../credentials/backends/rocky-1password-resolver.ts';
 
 /**
  * Standard error messages for server build failures.
@@ -34,6 +35,16 @@ export const SERVER_BUILD_ERRORS = {
 export type McpServerConfig =
   | { type: 'http' | 'sse'; url: string; headers?: Record<string, string> }
   | { type: 'stdio'; command: string; args?: string[]; env?: Record<string, string> };
+
+function resolveMcpEnv(env: Record<string, string> | undefined): Record<string, string> | undefined {
+  if (!env) return undefined;
+  return Object.fromEntries(
+    Object.entries(env).map(([key, value]) => [
+      key,
+      isRockyOnePasswordReference(value) ? resolveRockyOnePasswordValue(value) : value,
+    ])
+  );
+}
 
 /**
  * Source with its credential pre-loaded
@@ -99,7 +110,7 @@ export class SourceServerBuilder {
         type: 'stdio',
         command: mcp.command,
         args: mcp.args,
-        env: mcp.env,
+        env: resolveMcpEnv(mcp.env),
       };
     }
 
