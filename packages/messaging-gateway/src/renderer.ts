@@ -64,6 +64,8 @@ interface RenderState {
   lastEditedLength: number
   /** Current effective edit interval (may increase on 429). */
   currentEditIntervalMs: number
+  /** Telegram native typing indicator pump for long-running responses. */
+  typingTimer: ReturnType<typeof setInterval> | null
 
   // --- progress / final_only modes -------------------------------------
   /** Progress/final_only: non-intermediate assistant text accumulated this run. */
@@ -76,6 +78,7 @@ interface RenderState {
 
 const DEFAULT_EDIT_INTERVAL_MS = 3500
 const BACKOFF_RESET_MS = 30_000
+const TYPING_PUMP_INTERVAL_MS = 4_000
 
 const THINKING_LABEL = '💭 thinking…'
 
@@ -122,6 +125,7 @@ export class Renderer {
         editTimer: null,
         lastEditedLength: 0,
         currentEditIntervalMs: DEFAULT_EDIT_INTERVAL_MS,
+        typingTimer: null,
         finalBuffer: '',
         progressMessageId: null,
         progressStatus: null,
@@ -144,6 +148,8 @@ export class Renderer {
       return
     }
     if (event.type === 'credential_request') {
+      const state = this.getState(binding.id)
+      this.stopTypingPump(state)
       await this.handleCredentialRequest(binding, adapter)
       return
     }
@@ -154,6 +160,11 @@ export class Renderer {
     if (event.type === 'error' || event.type === 'typed_error') {
       await this.handleError(event, binding, adapter, this.getState(binding.id))
       return
+    }
+
+    const state = this.getState(binding.id)
+    if (isProcessingActivityEvent(event.type)) {
+      this.startTypingPump(state, binding, adapter)
     }
 
     const mode = resolveResponseMode(binding.config.responseMode, binding.config.streamResponses)
@@ -437,6 +448,7 @@ export class Renderer {
   ): Promise<void> {
     const request = event.request as PermissionRequest | undefined
     if (!request?.requestId) return
+    this.stopTypingPump(state)
 
     // Flush any streaming state first so the prompt lands as a distinct
     // message (progress-mode bubble stays in place as a separate message).
@@ -568,6 +580,7 @@ Approve in the desktop app to continue.`,
   ): Promise<void> {
     const errorMsg = extractErrorMessage(event.error)
     this.cancelEditTimer(state)
+    this.stopTypingPump(state)
     await adapter.sendText(binding.channelId, `❌ ${errorMsg}`)
     this.resetRun(state)
   }
@@ -609,9 +622,30 @@ Approve in the desktop app to continue.`,
     }
   }
 
+  private startTypingPump(
+    state: RenderState,
+    binding: ChannelBinding,
+    adapter: PlatformAdapter,
+  ): void {
+    if (adapter.platform !== 'telegram') return
+    if (state.typingTimer) return
+
+    void adapter.sendTyping(binding.channelId).catch(() => {})
+    state.typingTimer = setInterval(() => {
+      void adapter.sendTyping(binding.channelId).catch(() => {})
+    }, TYPING_PUMP_INTERVAL_MS)
+  }
+
+  private stopTypingPump(state: RenderState): void {
+    if (!state.typingTimer) return
+    clearInterval(state.typingTimer)
+    state.typingTimer = null
+  }
+
   /** Reset per-run state (called on `complete`, `error`, etc.). */
   private resetRun(state: RenderState): void {
     this.cancelEditTimer(state)
+    this.stopTypingPump(state)
     state.textBuffer = ''
     state.streamingMessageId = null
     state.lastEditedLength = 0
@@ -645,6 +679,7 @@ Approve in the desktop app to continue.`,
     const state = this.states.get(bindingId)
     if (state) {
       this.cancelEditTimer(state)
+      this.stopTypingPump(state)
       this.states.delete(bindingId)
     }
   }
@@ -661,6 +696,13 @@ function resolveResponseMode(
   if (responseMode) return responseMode
   // Legacy configs (pre-responseMode field): honour explicit streamResponses.
   return streamResponses === false ? 'final_only' : 'streaming'
+}
+
+function isProcessingActivityEvent(type: string): boolean {
+  return type === 'text_delta' ||
+    type === 'text_complete' ||
+    type === 'tool_start' ||
+    type === 'tool_result'
 }
 
 function appendFinal(existing: string, next: string): string {

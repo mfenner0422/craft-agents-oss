@@ -201,6 +201,34 @@ describe('Renderer — progress mode (default)', () => {
     expect(edits[0]!.text).toBe('hello world')
   })
 
+  it('starts Telegram typing on the first text delta before the visible bubble exists', async () => {
+    const adapter = makeAdapter()
+    const binding = makeBinding()
+    await play(renderer, binding, adapter, [
+      ev.delta('hello '),
+      ev.final('hello world'),
+      ev.complete(),
+    ])
+
+    expect(adapter.calls[0]!.kind).toBe('sendTyping')
+    const sends = adapter.calls.filter((c) => c.kind === 'sendText')
+    expect(sends[0]!.text).toBe('💭 thinking…')
+  })
+
+  it('starts Telegram typing on tool activity and stops cleanly on completion', async () => {
+    const adapter = makeAdapter()
+    const binding = makeBinding()
+    await play(renderer, binding, adapter, [
+      ev.toolStart('Read'),
+      ev.toolResult(),
+      ev.final('done'),
+      ev.complete(),
+    ])
+
+    expect(adapter.calls[0]!.kind).toBe('sendTyping')
+    expect(adapter.calls.filter((c) => c.kind === 'sendTyping')).toHaveLength(1)
+  })
+
   it('drops intermediate text — never appears in any message', async () => {
     const adapter = makeAdapter()
     const binding = makeBinding()
@@ -287,7 +315,7 @@ describe('Renderer — final_only mode', () => {
     const adapter = makeAdapter()
     const binding = makeBinding({ responseMode: 'final_only' as ResponseMode })
     await play(renderer, binding, adapter, [ev.toolStart('Read'), ev.toolResult(), ev.complete()])
-    expect(adapter.calls.length).toBe(0)
+    expect(adapter.calls.filter((c) => c.kind !== 'sendTyping')).toHaveLength(0)
   })
 
   it('treats text_complete without isIntermediate as final (backwards compat)', async () => {
