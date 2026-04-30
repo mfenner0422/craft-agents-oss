@@ -14,6 +14,18 @@ describe('Telegram MarkdownV2 formatter', () => {
     expect(formatForTelegram('[Open docs](https://example.com/a-b)')).toBe('[Open docs](https://example.com/a-b)')
   })
 
+  it('converts commonmark headings to Telegram bold text', () => {
+    expect(formatForTelegram('## Status update')).toBe('*Status update*')
+  })
+
+  it('converts commonmark emphasis markers to Telegram MarkdownV2 markers', () => {
+    expect(formatForTelegram('**Bold** and *italic* and ~~gone~~')).toBe('*Bold* and _italic_ and ~gone~')
+  })
+
+  it('escapes formatting content while preserving Telegram markers', () => {
+    expect(formatForTelegram('**hello_world!**')).toBe('*hello\\_world\\!*')
+  })
+
   it('strips code block language tags', () => {
     expect(formatForTelegram('```ts\nconst x = 1\n```')).toBe('```\nconst x = 1\n```')
   })

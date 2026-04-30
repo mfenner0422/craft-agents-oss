@@ -27,20 +27,44 @@ function formatInlineMarkdown(text: string): string {
   const tokens: string[] = []
   let working = text
 
-  working = working.replace(/`([^`\n]+)`/g, (_match, code: string) => {
+  const tokenFor = (value: string): string => {
     const token = `\u0000${tokens.length}\u0000`
-    tokens.push(`\`${escapeInlineCode(code)}\``)
+    tokens.push(value)
     return token
+  }
+
+  working = working.replace(/`([^`\n]+)`/g, (_match, code: string) => {
+    return tokenFor(`\`${escapeInlineCode(code)}\``)
   })
 
   working = working.replace(/\[([^\]\n]+)\]\(([^)\s]+)\)/g, (_match, label: string, url: string) => {
-    const token = `\u0000${tokens.length}\u0000`
-    tokens.push(`[${escapeTelegramMarkdown(label)}](${escapeLinkUrl(url)})`)
-    return token
+    return tokenFor(`[${escapeTelegramMarkdown(label)}](${escapeLinkUrl(url)})`)
+  })
+
+  working = working.replace(/(\*\*|__)([^\n]+?)\1/g, (_match, _marker: string, content: string) => {
+    return tokenFor(`*${escapeTelegramMarkdown(content)}*`)
+  })
+
+  working = working.replace(/~~([^\n]+?)~~/g, (_match, content: string) => {
+    return tokenFor(`~${escapeTelegramMarkdown(content)}~`)
+  })
+
+  working = working.replace(/(^|[^\*])\*([^\*\n]+?)\*(?!\*)/g, (_match, prefix: string, content: string) => {
+    return `${prefix}${tokenFor(`_${escapeTelegramMarkdown(content)}_`)}`
+  })
+
+  working = working.replace(/(^|[^_])_([^_\n]+?)_(?!_)/g, (_match, prefix: string, content: string) => {
+    return `${prefix}${tokenFor(`_${escapeTelegramMarkdown(content)}_`)}`
   })
 
   const escaped = escapeTelegramMarkdown(working)
   return escaped.replace(/\u0000(\d+)\u0000/g, (_match, index: string) => tokens[Number(index)] ?? '')
+}
+
+function formatHeadings(text: string): string {
+  return text.replace(/^(#{1,6})\s+(.+)$/gm, (_match, _level: string, title: string) => {
+    return `**${title.trim()}**`
+  })
 }
 
 function formatTableBlocks(text: string): string {
@@ -68,7 +92,7 @@ function formatTableBlocks(text: string): string {
 }
 
 function formatPlainSegment(text: string): string {
-  return formatTableBlocks(text)
+  return formatHeadings(formatTableBlocks(text))
     .split(/(```[\s\S]*?```)/g)
     .map((part) => {
       if (part.startsWith('```') && part.endsWith('```')) {
