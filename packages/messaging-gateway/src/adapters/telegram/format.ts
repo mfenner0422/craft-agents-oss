@@ -104,7 +104,7 @@ export function splitTelegramMessages(text: string, softLimit = SOFT_MESSAGE_LIM
   let inCodeBlock = false
 
   for (const paragraph of text.split(/(\n\n+)/)) {
-    const nextInCodeBlock = inCodeBlock
+    const wasInCodeBlock: boolean = inCodeBlock
     const candidate = current + paragraph
     if (!inCodeBlock && current && candidate.length > softLimit) {
       chunks.push(current.trimEnd())
@@ -120,7 +120,7 @@ export function splitTelegramMessages(text: string, softLimit = SOFT_MESSAGE_LIM
     }
 
     const fences = (paragraph.match(/```/g) ?? []).length
-    if (fences % 2 === 1) inCodeBlock = !nextInCodeBlock
+    if (fences % 2 === 1) inCodeBlock = !wasInCodeBlock
   }
 
   if (current.trim()) chunks.push(current.trimEnd())
