@@ -60,13 +60,13 @@ function baseMsg(overrides: Partial<IncomingMessage> = {}): IncomingMessage {
   }
 }
 
-function makeFakeAdapter(): PlatformAdapter {
+function makeFakeAdapter(platform: 'telegram' | 'whatsapp' = 'telegram'): PlatformAdapter {
   // Only sendText is exercised by Router (for error branch); rest are unused.
   const noop = async () => {
     throw new Error('unused')
   }
   return {
-    platform: 'telegram',
+    platform,
     capabilities: {
       messageEditing: true,
       inlineButtons: true,
@@ -80,10 +80,10 @@ function makeFakeAdapter(): PlatformAdapter {
     isConnected: () => true,
     onMessage: () => {},
     onButtonPress: () => {},
-    sendText: mock(async () => ({ platform: 'telegram', channelId: 'chat-1', messageId: 'm' })),
+    sendText: mock(async () => ({ platform, channelId: 'chat-1', messageId: 'm' })),
     editMessage: noop,
     sendButtons: noop,
-    sendTyping: async () => {},
+    sendTyping: mock(async () => {}),
     sendFile: noop,
   } as unknown as PlatformAdapter
 }
@@ -113,12 +113,29 @@ function makeRouter() {
 describe('Router', () => {
   it('forwards a text-only bound message to sendMessage', async () => {
     const { router, sessionManager } = makeRouter()
-    await router.route(makeFakeAdapter(), baseMsg({ text: 'hi there' }))
+    const adapter = makeFakeAdapter()
+    await router.route(adapter, baseMsg({ text: 'hi there' }))
     expect(sessionManager.sendMessage).toHaveBeenCalledTimes(1)
+    expect(adapter.sendTyping).toHaveBeenCalledTimes(1)
     const args = sessionManager.sendMessage.mock.calls[0]!
     expect(args[0]).toBe('sess-A') // sessionId
     expect(args[1]).toBe('hi there') // message
     expect(args[2]).toBeUndefined() // fileAttachments
+  })
+
+  it('does not start native typing for non-Telegram adapters', async () => {
+    const { router, sessionManager, store } = makeRouter()
+    store.bind('ws1', 'sess-WA', 'whatsapp', 'wa-1')
+    const adapter = makeFakeAdapter('whatsapp')
+
+    await router.route(adapter, baseMsg({
+      platform: 'whatsapp',
+      channelId: 'wa-1',
+      text: 'hi there',
+    }))
+
+    expect(sessionManager.sendMessage).toHaveBeenCalledTimes(1)
+    expect(adapter.sendTyping).not.toHaveBeenCalled()
   })
 
   it('materializes a localPath attachment into FileAttachment[]', async () => {

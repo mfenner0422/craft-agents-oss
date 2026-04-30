@@ -22,6 +22,8 @@ const NOOP_LOGGER: MessagingLogger = {
   child: () => NOOP_LOGGER,
 }
 
+const TYPING_PUMP_INTERVAL_MS = 4_000
+
 export class Router {
   constructor(
     private readonly sessionManager: ISessionManager,
@@ -34,6 +36,7 @@ export class Router {
     const binding = this.bindingStore.findByChannel(msg.platform, msg.channelId)
 
     if (binding) {
+      const stopTyping = this.startTypingPump(adapter, msg.channelId)
       try {
         const fileAttachments = this.resolveAttachments(msg)
         this.log.info('routing inbound chat message to session', {
@@ -65,6 +68,8 @@ export class Router {
           msg.channelId,
           `Failed to send message to session: ${errorMsg}`,
         )
+      } finally {
+        stopTyping()
       }
       return
     }
@@ -99,5 +104,16 @@ export class Router {
       built.push(att)
     }
     return built.length > 0 ? built : undefined
+  }
+
+  private startTypingPump(adapter: PlatformAdapter, channelId: string): () => void {
+    if (adapter.platform !== 'telegram') return () => {}
+
+    void adapter.sendTyping(channelId).catch(() => {})
+    const timer = setInterval(() => {
+      void adapter.sendTyping(channelId).catch(() => {})
+    }, TYPING_PUMP_INTERVAL_MS)
+
+    return () => clearInterval(timer)
   }
 }
