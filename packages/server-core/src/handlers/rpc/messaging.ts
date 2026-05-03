@@ -48,6 +48,11 @@ export function registerMessagingHandlers(server: RpcServer, deps: HandlerDeps):
     return registry.getBindings(ctx.workspaceId)
   })
 
+  server.handle(RPC_CHANNELS.messaging.BIND_CHANNEL, async (ctx, sessionId: string, platform: string, channelId: string, channelName?: string) => {
+    if (!ctx.workspaceId) throw new Error('Missing workspaceId')
+    return registry.bindChannel(ctx.workspaceId, sessionId, platform, channelId, channelName)
+  })
+
   server.handle(RPC_CHANNELS.messaging.GENERATE_CODE, async (ctx, sessionId: string, platform: string) => {
     if (!ctx.workspaceId) throw new Error('Missing workspaceId')
     return registry.generatePairingCode(ctx.workspaceId, sessionId, platform)

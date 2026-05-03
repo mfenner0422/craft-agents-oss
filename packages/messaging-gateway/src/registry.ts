@@ -258,6 +258,37 @@ export class MessagingGatewayRegistry implements IMessagingGatewayRegistry {
     return state.gateway.getBindingStore().getAll().map(toBindingInfo)
   }
 
+  async bindChannel(
+    workspaceId: string,
+    sessionId: string,
+    platform: string,
+    channelId: string,
+    channelName?: string,
+  ): Promise<MessagingBindingInfo> {
+    if (!isKnownPlatform(platform)) {
+      throw new Error(`Unknown messaging platform: ${platform}`)
+    }
+
+    const state = this.workspaces.get(workspaceId) ?? this.bootstrapWorkspace(workspaceId)
+    const session = await this.opts.sessionManager.getSession(sessionId)
+    if (!session) {
+      throw new Error(`Session not found: ${sessionId}`)
+    }
+
+    const store = state.gateway.getBindingStore()
+    const existing = store.findByChannel(platform, channelId)
+    const binding = store.bind(
+      workspaceId,
+      sessionId,
+      platform,
+      channelId,
+      channelName ?? existing?.channelName,
+      existing?.config,
+    )
+    this.emitBindingChanged(workspaceId)
+    return toBindingInfo(binding)
+  }
+
   unbindSession(workspaceId: string, sessionId: string, platform?: string): void {
     const state = this.workspaces.get(workspaceId)
     if (!state) return

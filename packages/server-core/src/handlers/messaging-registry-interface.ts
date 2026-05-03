@@ -36,6 +36,15 @@ export interface IMessagingGatewayRegistry {
   /** Get bindings for a workspace. */
   getBindings(workspaceId: string): MessagingBindingInfo[]
 
+  /** Bind one messaging channel to a session, replacing that channel's prior binding. */
+  bindChannel(
+    workspaceId: string,
+    sessionId: string,
+    platform: string,
+    channelId: string,
+    channelName?: string,
+  ): Promise<MessagingBindingInfo>
+
   /** Get messaging config and runtime state for a workspace. */
   getConfig(workspaceId: string): MessagingConfigInfo | null
 

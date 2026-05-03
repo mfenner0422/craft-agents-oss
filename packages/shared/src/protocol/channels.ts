@@ -397,6 +397,7 @@ export const RPC_CHANNELS = {
     DISCONNECT: 'messaging:disconnect',
     FORGET: 'messaging:forget',
     GET_BINDINGS: 'messaging:getBindings',
+    BIND_CHANNEL: 'messaging:bindChannel',
     GENERATE_CODE: 'messaging:generateCode',
     UNBIND: 'messaging:unbind',
     UNBIND_BINDING: 'messaging:unbindBinding',

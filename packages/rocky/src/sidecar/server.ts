@@ -1,22 +1,39 @@
-import { detectDecisionSignal, detectEntitySignals } from './patterns.ts';
 import { spawn } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
 import { join, basename } from 'node:path';
+import { detectDecisionSignal, detectEntitySignals } from '../signal-detector/patterns.ts';
+import { resetMainSession } from './main-session-reset.ts';
 
-export interface SignalDetectorOptions {
+export interface RockySidecarOptions {
   port?: number;
   entitySlugs?: string[];
   onSignal?: (matches: ReturnType<typeof detectEntitySignals>) => void | Promise<void>;
 }
 
-export function startSignalDetector(options: SignalDetectorOptions = {}): ReturnType<typeof Bun.serve> {
+export function startRockySidecar(options: RockySidecarOptions = {}): ReturnType<typeof Bun.serve> {
   const port = options.port ?? 48212;
   const entitySlugs = options.entitySlugs ?? [];
 
   return Bun.serve({
     port,
     async fetch(req) {
-      if (new URL(req.url).pathname !== '/signal') {
+      const pathname = new URL(req.url).pathname;
+
+      if (pathname === '/reset-main-session') {
+        try {
+          const payload = await req.json().catch((): Record<string, unknown> => ({}));
+          const data = payload && typeof payload === 'object'
+            ? payload as Record<string, unknown>
+            : {};
+          const result = await resetMainSession(data);
+          return Response.json(result);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          return Response.json({ ok: false, error: message }, { status: 500 });
+        }
+      }
+
+      if (pathname !== '/signal') {
         return new Response('not found', { status: 404 });
       }
 
@@ -95,8 +112,8 @@ bun run apps/cli/src/index.ts --url "${url}" --workspace "${workspaceId}" --time
 
 if (import.meta.main) {
   const workspaceRoot = process.env.WORKSPACE_ROOT ?? '/workspace';
-  const server = startSignalDetector({
-    port: Number(process.env.ROCKY_SIGNAL_PORT ?? 48212),
+  const server = startRockySidecar({
+    port: Number(process.env.ROCKY_SIDECAR_PORT ?? process.env.ROCKY_SIGNAL_PORT ?? 48212),
     entitySlugs: loadEntitySlugs(workspaceRoot),
     onSignal(matches) {
       for (const match of matches) {
@@ -106,5 +123,5 @@ if (import.meta.main) {
       }
     },
   });
-  console.log(`[signal-detector] listening on ${server.url}`);
+  console.log(`[rocky-sidecar] listening on ${server.url}`);
 }

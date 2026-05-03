@@ -4,5 +4,7 @@ export * from './digest/formatter.ts';
 export * from './qmd/lifecycle.ts';
 export * from './qmd/session-exporter.ts';
 export * from './signal-detector/patterns.ts';
+export * from './sidecar/main-session-reset.ts';
+export * from './sidecar/rpc.ts';
+export * from './sidecar/server.ts';
 export * from './vault-index/builder.ts';
-
