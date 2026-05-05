@@ -511,7 +511,15 @@ export function SessionList({
   }, [focusZone, flatRows, selectRange])
 
   // Arrow key shortcuts for zone navigation (left → sidebar, right → chat)
-  const handleKeyDown = useCallback((e: React.KeyboardEvent, _item: SessionMeta) => {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent, item: SessionMeta) => {
+    if (/^[1-9]$/.test(e.key)) {
+      const status = sessionStatuses[Number(e.key) - 1]
+      if (status) {
+        e.preventDefault()
+        onSessionStatusChange(item.id, status.id)
+      }
+      return
+    }
     if (e.key === 'ArrowLeft') {
       e.preventDefault()
       focusZone('sidebar', { intent: 'keyboard' })
@@ -522,7 +530,7 @@ export function SessionList({
       focusZone('chat', { intent: 'keyboard' })
       return
     }
-  }, [focusZone])
+  }, [focusZone, onSessionStatusChange, sessionStatuses])
 
   // --- Rename dialog ---
   const handleRenameClick = useCallback((sessionId: string, currentName: string) => {
