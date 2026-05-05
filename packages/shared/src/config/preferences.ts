@@ -34,11 +34,13 @@ export interface UserPreferences {
   diffViewer?: DiffViewerPreferences;
   // Whether to include Co-Authored-By trailer on git commits (default: true)
   includeCoAuthoredBy?: boolean;
+  captureHotkey?: string;
   // When the preferences were last updated
   updatedAt?: number;
 }
 
 const PREFERENCES_FILE = join(CONFIG_DIR, 'preferences.json');
+export const UI_ONLY_PREFERENCE_KEYS = new Set<keyof UserPreferences>(['captureHotkey']);
 
 export function loadPreferences(): UserPreferences {
   try {
@@ -91,7 +93,11 @@ export function formatPreferencesForPrompt(): string {
   const langEntry = LOCALE_REGISTRY[langCode];
   const langName = langEntry?.nativeName ?? 'English';
 
-  if (Object.keys(prefs).length === 0 ||
+  const promptPrefs = Object.fromEntries(
+    Object.entries(prefs).filter(([key]) => !UI_ONLY_PREFERENCE_KEYS.has(key as keyof UserPreferences))
+  ) as UserPreferences;
+
+  if (Object.keys(promptPrefs).length === 0 ||
       (!prefs.name && !prefs.timezone && !prefs.location && !prefs.notes && langCode === 'en')) {
     return '';
   }

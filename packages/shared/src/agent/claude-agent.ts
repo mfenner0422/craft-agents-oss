@@ -2456,6 +2456,10 @@ This is a branched conversation. All prior messages in this conversation are par
     // Note: MCP proxy needs to be reinitialized by the caller (useAgent hook)
   }
 
+  refreshWorkspaceConfig(workspace: Workspace): void {
+    this.config.workspace = workspace;
+  }
+
   getSessionId(): string | null {
     return this.sessionId;
   }

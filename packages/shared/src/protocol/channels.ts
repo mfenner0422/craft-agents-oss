@@ -251,6 +251,14 @@ export const RPC_CHANNELS = {
     WRITE_IMAGE: 'workspace:writeImage',
     SETTINGS_GET: 'workspaceSettings:get',
     SETTINGS_UPDATE: 'workspaceSettings:update',
+    SETTINGS_CHANGED: 'workspaceSettings:changed',
+    SETTINGS_INVALID: 'workspaceSettings:invalid',
+  },
+  app: {
+    GET_CAPTURE_HOTKEY: 'app:captureHotkey:get',
+    SET_CAPTURE_HOTKEY: 'app:captureHotkey:set',
+    CAPTURE_HOTKEY_CHANGED: 'app:captureHotkey:changed',
+    CAPTURE_HOTKEY_CONFLICT: 'app:captureHotkey:conflict',
   },
   permissions: {
     GET_DEFAULTS: 'permissions:getDefaults',

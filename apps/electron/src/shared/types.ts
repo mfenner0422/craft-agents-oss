@@ -426,6 +426,12 @@ export interface ElectronAPI {
   // Workspace Settings (per-workspace configuration)
   getWorkspaceSettings(workspaceId: string): Promise<WorkspaceSettings | null>
   updateWorkspaceSetting<K extends keyof WorkspaceSettings>(workspaceId: string, key: K, value: WorkspaceSettings[K]): Promise<void>
+  onWorkspaceSettingsChanged(callback: (payload: { workspaceId: string; settings: WorkspaceSettings | null }) => void): () => void
+  onWorkspaceSettingsInvalid(callback: (payload: { workspaceId: string; issues: Array<{ field: string; message: string }> }) => void): () => void
+  getCaptureHotkey(): Promise<string>
+  setCaptureHotkey(accelerator: string): Promise<{ ok: boolean; error?: string }>
+  onCaptureHotkeyChanged(callback: (accelerator: string) => void): () => void
+  onCaptureHotkeyConflict(callback: (payload: { accelerator: string; error: string }) => void): () => void
 
   // Folder dialog
   openFolderDialog(): Promise<string | null>

@@ -528,6 +528,9 @@ export interface AgentBackend {
   /** Set workspace configuration */
   setWorkspace(workspace: Workspace): void;
 
+  /** Refresh same-workspace configuration without clearing session state */
+  refreshWorkspaceConfig(workspace: Workspace): void;
+
   /** Set session ID */
   setSessionId(sessionId: string | null): void;
 

@@ -523,6 +523,10 @@ export abstract class BaseAgent implements AgentBackend {
     // Subclasses should clear session-specific state
   }
 
+  refreshWorkspaceConfig(workspace: Workspace): void {
+    this.config.workspace = workspace;
+  }
+
   getSessionId(): string | null {
     return this._sessionId;
   }

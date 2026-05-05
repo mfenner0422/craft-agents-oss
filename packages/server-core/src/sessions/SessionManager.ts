@@ -998,6 +998,7 @@ export class SessionManager implements ISessionManager {
   private configWatchers: Map<string, ConfigWatcher> = new Map()
   // Automation systems for workspace event automations - one per workspace (includes scheduler, diffing, and handlers)
   private automationSystems: Map<string, AutomationSystem> = new Map()
+  private onWorkspaceConfigChangeCallback: ((workspaceId: string) => void) | null = null
   // Pending credential request resolvers (keyed by requestId)
   private pendingCredentialResolvers: Map<string, (response: import('@craft-agent/shared/protocol').CredentialResponse) => void> = new Map()
   // Permission request metadata tracking (keyed by requestId)
@@ -1254,6 +1255,17 @@ export class SessionManager implements ISessionManager {
         // Notify renderer to re-read automations.json
         this.broadcastAutomationsChanged(workspaceId)
       },
+      onWorkspaceConfigChange: async (_changedWorkspaceId, issues) => {
+        sessionLog.info(`Workspace config changed in ${workspaceId}`)
+        await this.refreshWorkspaceConfigForActiveSessions(workspaceRootPath, workspaceId)
+        const settings = this.getWorkspaceSettingsProjection(workspaceRootPath)
+        this.broadcastWorkspaceSettingsChanged(workspaceId, settings)
+        if (issues.length > 0) {
+          sessionLog.warn(`Workspace config validation issues in ${workspaceId}:`, issues)
+          this.broadcastWorkspaceSettingsInvalid(workspaceId, issues)
+        }
+        this.onWorkspaceConfigChangeCallback?.(workspaceId)
+      },
       onLlmConnectionsChange: () => {
         sessionLog.info(`LLM connections changed in ${workspaceId}`)
         this.broadcastLlmConnectionsChanged()
@@ -1458,6 +1470,53 @@ export class SessionManager implements ISessionManager {
     if (!this.eventSink) return
     sessionLog.info('Broadcasting default permissions changed')
     this.eventSink(RPC_CHANNELS.permissions.DEFAULTS_CHANGED, { to: 'all' }, null)
+  }
+
+  private broadcastWorkspaceSettingsChanged(workspaceId: string, settings: import('@craft-agent/shared/protocol').WorkspaceSettings | null): void {
+    if (!this.eventSink) return
+    this.eventSink(RPC_CHANNELS.workspace.SETTINGS_CHANGED, { to: 'workspace', workspaceId }, { workspaceId, settings })
+  }
+
+  private broadcastWorkspaceSettingsInvalid(workspaceId: string, issues: Array<{ field: string; message: string }>): void {
+    if (!this.eventSink) return
+    this.eventSink(RPC_CHANNELS.workspace.SETTINGS_INVALID, { to: 'workspace', workspaceId }, { workspaceId, issues })
+  }
+
+  private getWorkspaceSettingsProjection(workspaceRootPath: string): import('@craft-agent/shared/protocol').WorkspaceSettings | null {
+    const config = loadWorkspaceConfig(workspaceRootPath)
+    if (!config) return null
+    return {
+      name: config.name,
+      model: config.defaults?.model,
+      permissionMode: config.defaults?.permissionMode,
+      cyclablePermissionModes: config.defaults?.cyclablePermissionModes,
+      thinkingLevel: normalizeThinkingLevel(config.defaults?.thinkingLevel),
+      workingDirectory: config.defaults?.workingDirectory,
+      localMcpEnabled: config.localMcpServers?.enabled ?? true,
+      defaultLlmConnection: config.defaults?.defaultLlmConnection,
+      enabledSourceSlugs: config.defaults?.enabledSourceSlugs ?? [],
+      vaultPath: config.vault?.path,
+      daysEnabled: config.days?.enabled ?? false,
+      daysMorningTime: config.days?.morningTime ?? '08:00',
+      daysEveningTime: config.days?.eveningTime ?? '19:00',
+      captureEnabled: config.capture?.enabled ?? false,
+    }
+  }
+
+  private async refreshWorkspaceConfigForActiveSessions(workspaceRootPath: string, workspaceId: string): Promise<void> {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) return
+    const config = loadWorkspaceConfig(workspaceRootPath)
+    const updatedWorkspace = { ...workspace, name: config?.name ?? workspace.name }
+    for (const managed of this.sessions.values()) {
+      if (managed.workspace.rootPath !== workspaceRootPath) continue
+      managed.workspace = updatedWorkspace
+      managed.agent?.refreshWorkspaceConfig(updatedWorkspace)
+    }
+  }
+
+  public setOnWorkspaceConfigChange(cb: ((workspaceId: string) => void) | null): void {
+    this.onWorkspaceConfigChangeCallback = cb
   }
 
   /**

@@ -41,7 +41,7 @@ import {
   downloadSourceIcon,
 } from '../sources/storage.ts';
 import { permissionsConfigCache, getAppPermissionsDir } from '../agent/permissions-config.ts';
-import { getWorkspacePath, getWorkspaceSourcesPath, getWorkspaceSkillsPath } from '../workspaces/storage.ts';
+import { getWorkspacePath, getWorkspaceSourcesPath, getWorkspaceSkillsPath, loadWorkspaceConfig } from '../workspaces/storage.ts';
 import type { LoadedSkill } from '../skills/types.ts';
 import { loadSkill, loadAllSkills, invalidateSkillsCache, skillNeedsIconDownload, downloadSkillIcon } from '../skills/storage.ts';
 import {
@@ -102,7 +102,13 @@ export interface UserPreferences {
   };
   language?: string;
   notes?: string;
+  captureHotkey?: string;
   updatedAt?: number;
+}
+
+export interface WorkspaceConfigValidationIssue {
+  field: string;
+  message: string;
 }
 
 /**
@@ -135,6 +141,8 @@ export interface ConfigWatcherCallbacks {
   onDefaultPermissionsChange?: () => void;
   /** Called when workspace permissions.json changes */
   onWorkspacePermissionsChange?: (workspaceId: string) => void;
+  /** Called when workspace-root config.json changes */
+  onWorkspaceConfigChange?: (workspaceId: string, issues: WorkspaceConfigValidationIssue[]) => void;
   /** Called when a source's permissions.json changes */
   onSourcePermissionsChange?: (sourceSlug: string) => void;
 
@@ -189,6 +197,29 @@ export function loadPreferences(): UserPreferences | null {
     debug('[ConfigWatcher] Error loading preferences', error);
     return null;
   }
+}
+
+function validateWorkspaceRuntimeConfig(config: import('../workspaces/types.ts').WorkspaceConfig): WorkspaceConfigValidationIssue[] {
+  const issues: WorkspaceConfigValidationIssue[] = [];
+  const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+  if (config.vault?.path !== undefined && typeof config.vault.path !== 'string') {
+    issues.push({ field: 'vault.path', message: 'Vault path must be a string' });
+  }
+  if (config.days?.morningTime !== undefined && !timePattern.test(String(config.days.morningTime))) {
+    issues.push({ field: 'days.morningTime', message: 'Morning time must use HH:MM format' });
+  }
+  if (config.days?.eveningTime !== undefined && !timePattern.test(String(config.days.eveningTime))) {
+    issues.push({ field: 'days.eveningTime', message: 'Evening time must use HH:MM format' });
+  }
+  if (config.days?.carryForwardMaxRolls !== undefined && (!Number.isInteger(config.days.carryForwardMaxRolls) || config.days.carryForwardMaxRolls < 0)) {
+    issues.push({ field: 'days.carryForwardMaxRolls', message: 'Carry-forward max rolls must be a non-negative integer' });
+  }
+  if (config.capture?.enabled !== undefined && typeof config.capture.enabled !== 'boolean') {
+    issues.push({ field: 'capture.enabled', message: 'Capture enabled must be boolean' });
+  }
+
+  return issues;
 }
 
 // ============================================================
@@ -414,6 +445,12 @@ export class ConfigWatcher {
    */
   private handleWorkspaceFileChange(relativePath: string, eventType: string): void {
     const parts = relativePath.split('/');
+
+    // Workspace-level permissions.json
+    if (relativePath === 'config.json') {
+      this.debounce('workspace-config', () => this.handleWorkspaceConfigChange());
+      return;
+    }
 
     // Workspace-level permissions.json
     if (relativePath === 'permissions.json') {
@@ -832,6 +869,16 @@ export class ConfigWatcher {
 
     // Notify callback
     this.callbacks.onWorkspacePermissionsChange?.(this.workspaceId);
+  }
+
+  private handleWorkspaceConfigChange(): void {
+    debug('[ConfigWatcher] Workspace config.json changed:', this.workspaceId);
+    const config = loadWorkspaceConfig(this.workspaceDir);
+    if (!config) {
+      this.callbacks.onError?.('config.json', new Error('Failed to load workspace config'));
+      return;
+    }
+    this.callbacks.onWorkspaceConfigChange?.(this.workspaceId, validateWorkspaceRuntimeConfig(config));
   }
 
   /**

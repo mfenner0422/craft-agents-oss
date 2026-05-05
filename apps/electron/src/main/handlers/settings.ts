@@ -2,9 +2,13 @@ import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from './handler-deps'
 
+const DEFAULT_CAPTURE_HOTKEY = 'CommandOrControl+Alt+Space'
+
 export const GUI_HANDLED_CHANNELS = [
   RPC_CHANNELS.power.SET_KEEP_AWAKE,
   RPC_CHANNELS.settings.SET_NETWORK_PROXY,
+  RPC_CHANNELS.app.GET_CAPTURE_HOTKEY,
+  RPC_CHANNELS.app.SET_CAPTURE_HOTKEY,
 ] as const
 
 // ============================================================
@@ -26,5 +30,23 @@ export function registerSettingsGuiHandlers(server: RpcServer, _deps: HandlerDep
   server.handle(RPC_CHANNELS.settings.SET_NETWORK_PROXY, async (_ctx, settings: import('@craft-agent/shared/config/types').NetworkProxySettings) => {
     const { updateConfiguredProxySettings } = await import('../network-proxy')
     await updateConfiguredProxySettings(settings)
+  })
+
+  server.handle(RPC_CHANNELS.app.GET_CAPTURE_HOTKEY, async () => {
+    const { loadPreferences } = await import('@craft-agent/shared/config/preferences')
+    return loadPreferences().captureHotkey ?? DEFAULT_CAPTURE_HOTKEY
+  })
+
+  server.handle(RPC_CHANNELS.app.SET_CAPTURE_HOTKEY, async (_ctx, accelerator: string) => {
+    const trimmed = accelerator.trim()
+    if (!trimmed || !/^[A-Za-z0-9+ -]+$/.test(trimmed)) {
+      return { ok: false, error: 'invalid' }
+    }
+
+    const { loadPreferences, savePreferences } = await import('@craft-agent/shared/config/preferences')
+    const prefs = loadPreferences()
+    savePreferences({ ...prefs, captureHotkey: trimmed })
+    server.push(RPC_CHANNELS.app.CAPTURE_HOTKEY_CHANGED, { to: 'all' }, trimmed)
+    return { ok: true }
   })
 }

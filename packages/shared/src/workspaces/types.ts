@@ -27,6 +27,21 @@ export interface LocalMcpConfig {
   enabled: boolean;
 }
 
+export interface VaultConfig {
+  path?: string;
+}
+
+export interface DaysConfig {
+  enabled: boolean;
+  morningTime?: string;
+  eveningTime?: string;
+  carryForwardMaxRolls?: number;
+}
+
+export interface CaptureConfig {
+  enabled: boolean;
+}
+
 /**
  * Workspace configuration (stored in config.json)
  */
@@ -56,6 +71,10 @@ export interface WorkspaceConfig {
    * Resolution order: ENV (CRAFT_LOCAL_MCP_ENABLED) > workspace config > default (true)
    */
   localMcpServers?: LocalMcpConfig;
+
+  vault?: VaultConfig;
+  days?: DaysConfig;
+  capture?: CaptureConfig;
 
   createdAt: number;
   updatedAt: number;

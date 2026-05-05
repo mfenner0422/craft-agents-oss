@@ -198,6 +198,12 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.settings.GET_NETWORK_PROXY,
   RPC_CHANNELS.settings.SET_NETWORK_PROXY,
 
+  // app — local app-level settings
+  RPC_CHANNELS.app.GET_CAPTURE_HOTKEY,
+  RPC_CHANNELS.app.SET_CAPTURE_HOTKEY,
+  RPC_CHANNELS.app.CAPTURE_HOTKEY_CHANGED,
+  RPC_CHANNELS.app.CAPTURE_HOTKEY_CONFLICT,
+
   // server config — local embedded server settings
   RPC_CHANNELS.settings.GET_SERVER_CONFIG,
   RPC_CHANNELS.settings.SET_SERVER_CONFIG,
@@ -353,6 +359,8 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.workspace.WRITE_IMAGE,
   RPC_CHANNELS.workspace.SETTINGS_GET,
   RPC_CHANNELS.workspace.SETTINGS_UPDATE,
+  RPC_CHANNELS.workspace.SETTINGS_CHANGED,
+  RPC_CHANNELS.workspace.SETTINGS_INVALID,
 
   // permissions — workspace permissions
   RPC_CHANNELS.permissions.GET_DEFAULTS,

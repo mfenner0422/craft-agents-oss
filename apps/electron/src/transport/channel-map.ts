@@ -173,6 +173,12 @@ export const CHANNEL_MAP = {
   // Workspace Settings
   getWorkspaceSettings: invoke(RPC_CHANNELS.workspace.SETTINGS_GET),
   updateWorkspaceSetting: invoke(RPC_CHANNELS.workspace.SETTINGS_UPDATE),
+  onWorkspaceSettingsChanged: listener(RPC_CHANNELS.workspace.SETTINGS_CHANGED),
+  onWorkspaceSettingsInvalid: listener(RPC_CHANNELS.workspace.SETTINGS_INVALID),
+  getCaptureHotkey: invoke(RPC_CHANNELS.app.GET_CAPTURE_HOTKEY),
+  setCaptureHotkey: invoke(RPC_CHANNELS.app.SET_CAPTURE_HOTKEY),
+  onCaptureHotkeyChanged: listener(RPC_CHANNELS.app.CAPTURE_HOTKEY_CHANGED),
+  onCaptureHotkeyConflict: listener(RPC_CHANNELS.app.CAPTURE_HOTKEY_CONFLICT),
 
   // Folder dialog
   openFolderDialog: invoke(RPC_CHANNELS.dialog.OPEN_FOLDER),
