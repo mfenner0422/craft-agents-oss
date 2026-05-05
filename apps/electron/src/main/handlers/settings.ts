@@ -3,6 +3,11 @@ import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from './handler-deps'
 
 const DEFAULT_CAPTURE_HOTKEY = 'CommandOrControl+Alt+Space'
+let captureHotkeyBinder: ((accelerator: string) => { ok: boolean; error?: string }) | null = null
+
+export function setCaptureHotkeyBinder(binder: ((accelerator: string) => { ok: boolean; error?: string }) | null): void {
+  captureHotkeyBinder = binder
+}
 
 export const GUI_HANDLED_CHANNELS = [
   RPC_CHANNELS.power.SET_KEEP_AWAKE,
@@ -41,6 +46,12 @@ export function registerSettingsGuiHandlers(server: RpcServer, _deps: HandlerDep
     const trimmed = accelerator.trim()
     if (!trimmed || !/^[A-Za-z0-9+ -]+$/.test(trimmed)) {
       return { ok: false, error: 'invalid' }
+    }
+
+    const bindResult = captureHotkeyBinder?.(trimmed) ?? { ok: true }
+    if (!bindResult.ok) {
+      server.push(RPC_CHANNELS.app.CAPTURE_HOTKEY_CONFLICT, { to: 'all' }, { accelerator: trimmed, error: bindResult.error ?? 'conflict' })
+      return bindResult
     }
 
     const { loadPreferences, savePreferences } = await import('@craft-agent/shared/config/preferences')

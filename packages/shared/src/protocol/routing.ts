@@ -281,6 +281,11 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   // credentials — remote server's credential state
   RPC_CHANNELS.credentials.HEALTH_CHECK,
 
+  // capture — workspace vault content
+  RPC_CHANNELS.capture.SAVE,
+  RPC_CHANNELS.capture.LIST,
+  RPC_CHANNELS.capture.ENRICH_URL,
+
   // llmConnections — LLM config lives on server running workspace
   RPC_CHANNELS.llmConnections.LIST,
   RPC_CHANNELS.llmConnections.LIST_WITH_STATUS,

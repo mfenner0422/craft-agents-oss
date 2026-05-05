@@ -188,6 +188,7 @@ const DEEPLINK_SCHEME = process.env.CRAFT_DEEPLINK_SCHEME || 'craftagents'
 
 let windowManager: WindowManager | null = null
 let sessionManager: SessionManager | null = null
+let captureManager: import('./capture-manager').CaptureManager | null = null
 let browserPaneManager: BrowserPaneManager | null = null
 let oauthFlowStore: OAuthFlowStore | null = null
 let moduleSink: EventSink | null = null
@@ -706,6 +707,20 @@ app.whenReady().then(async () => {
 
       // Capture module-level references for before-quit cleanup and deep-link handlers
       sessionManager = instance.sessionManager
+      const [{ CaptureManager }, { loadPreferences }, { setCaptureHotkeyBinder }] = await Promise.all([
+        import('./capture-manager'),
+        import('@craft-agent/shared/config/preferences'),
+        import('./handlers/settings'),
+      ])
+      captureManager = new CaptureManager({
+        initialHotkey: loadPreferences().captureHotkey ?? 'CommandOrControl+Alt+Space',
+        onCapture: () => {
+          const focused = BrowserWindow.getFocusedWindow()
+          focused?.webContents.send('capture:open')
+        },
+      })
+      captureManager.start()
+      setCaptureHotkeyBinder((accelerator) => captureManager?.setHotkey(accelerator) ?? { ok: false, error: 'unavailable' })
       oauthFlowStore = instance.oauthFlowStore
       moduleSink = instance.wsServer.push.bind(instance.wsServer)
       moduleClientResolver = resolveClientId
@@ -1162,6 +1177,8 @@ app.on('before-quit', async (event) => {
     // Clean up power manager (release power blocker)
     const { cleanup: cleanupPowerManager } = await import('./power-manager')
     cleanupPowerManager()
+    captureManager?.dispose()
+    captureManager = null
 
     // Release the server lock file so the next launch doesn't see a stale PID.
     // This must happen regardless of the exit path (normal quit or update quit).

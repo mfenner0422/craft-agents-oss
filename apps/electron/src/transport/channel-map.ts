@@ -179,6 +179,9 @@ export const CHANNEL_MAP = {
   setCaptureHotkey: invoke(RPC_CHANNELS.app.SET_CAPTURE_HOTKEY),
   onCaptureHotkeyChanged: listener(RPC_CHANNELS.app.CAPTURE_HOTKEY_CHANGED),
   onCaptureHotkeyConflict: listener(RPC_CHANNELS.app.CAPTURE_HOTKEY_CONFLICT),
+  saveCapture: invoke(RPC_CHANNELS.capture.SAVE),
+  listCaptureInbox: invoke(RPC_CHANNELS.capture.LIST),
+  enrichCaptureUrl: invoke(RPC_CHANNELS.capture.ENRICH_URL),
 
   // Folder dialog
   openFolderDialog: invoke(RPC_CHANNELS.dialog.OPEN_FOLDER),

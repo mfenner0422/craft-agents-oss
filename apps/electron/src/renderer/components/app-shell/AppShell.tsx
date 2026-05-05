@@ -43,6 +43,8 @@ import { Button } from "@/components/ui/button"
 import { HeaderIconButton } from "@/components/ui/HeaderIconButton"
 import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipTrigger, TooltipContent, DocumentFormattedMarkdownOverlay } from "@craft-agent/ui"
+import { CaptureInboxList } from "@craft-agent/ui/capture"
+import type { CaptureItem } from "@craft-agent/shared/capture"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -111,6 +113,7 @@ import {
   isSettingsNavigation,
   isSkillsNavigation,
   isAutomationsNavigation,
+  isCaptureNavigation,
   type NavigationState,
 } from "@/contexts/NavigationContext"
 import type { SettingsSubpage } from "../../../shared/types"
@@ -837,6 +840,15 @@ function AppShellContent({
     handleTestAutomation, handleToggleAutomation, handleDuplicateAutomation, handleDeleteAutomation, confirmDeleteAutomation,
     getAutomationHistory, handleReplayAutomation,
   } = useAutomations(activeWorkspaceId)
+  const [captureItems, setCaptureItems] = React.useState<CaptureItem[]>([])
+
+  React.useEffect(() => {
+    if (!activeWorkspaceId) {
+      setCaptureItems([])
+      return
+    }
+    window.electronAPI.listCaptureInbox(activeWorkspaceId).then(setCaptureItems).catch(() => setCaptureItems([]))
+  }, [activeWorkspaceId])
 
   // Whether local MCP servers are enabled (affects stdio source status)
   const [localMcpEnabled, setLocalMcpEnabled] = React.useState(true)
@@ -1713,6 +1725,14 @@ function AppShellContent({
     navigate(routes.view.automationsAgentic())
   }, [])
 
+  const handleCaptureClick = useCallback(() => {
+    navigate(routes.view.capture())
+  }, [])
+
+  const handleCaptureItemClick = useCallback((itemId: string) => {
+    navigate(routes.view.capture(itemId))
+  }, [])
+
   // Handler for settings view
   const handleSettingsClick = useCallback((subpage: SettingsSubpage = 'app') => {
     navigate(routes.view.settings(subpage))
@@ -1955,13 +1975,14 @@ function AppShellContent({
 
     // 3. Sources, Skills, Settings
     result.push({ id: 'nav:sources', type: 'nav', action: handleSourcesClick })
+    result.push({ id: 'nav:capture', type: 'nav', action: handleCaptureClick })
     result.push({ id: 'nav:skills', type: 'nav', action: handleSkillsClick })
     result.push({ id: 'nav:automations', type: 'nav', action: handleAutomationsClick })
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
     result.push({ id: 'nav:whats-new', type: 'nav', action: handleWhatsNewClick })
 
     return result
-  }, [handleAllSessionsClick, handleFlaggedClick, handleArchivedClick, handleSessionStatusClick, effectiveSessionStatuses, handleLabelClick, labelConfigs, labelTree, viewConfigs, handleViewClick, handleSourcesClick, handleSkillsClick, handleAutomationsClick, handleSettingsClick, handleWhatsNewClick])
+  }, [handleAllSessionsClick, handleFlaggedClick, handleArchivedClick, handleSessionStatusClick, effectiveSessionStatuses, handleLabelClick, labelConfigs, labelTree, viewConfigs, handleViewClick, handleSourcesClick, handleCaptureClick, handleSkillsClick, handleAutomationsClick, handleSettingsClick, handleWhatsNewClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -2090,6 +2111,8 @@ function AppShellContent({
         default: return t("sidebar.allAutomations")
       }
     }
+
+    if (isCaptureNavigation(navState)) return t("sidebar.capture")
 
     // Settings navigator
     if (isSettingsNavigation(navState)) return t("sidebar.settings")
@@ -2401,6 +2424,14 @@ function AppShellContent({
                           },
                         },
                       ],
+                    },
+                    {
+                      id: "nav:capture",
+                      title: t("sidebar.capture"),
+                      label: captureItems.length > 0 ? String(captureItems.length) : undefined,
+                      icon: Inbox,
+                      variant: isCaptureNavigation(navState) ? "default" : "ghost",
+                      onClick: handleCaptureClick,
                     },
                     {
                       id: "nav:skills",
@@ -3156,6 +3187,13 @@ function AppShellContent({
                 onDeleteAutomation={handleDeleteAutomation}
                 selectedAutomationId={isAutomationsNavigation(navState) && navState.details ? navState.details.automationId : null}
                 workspaceRootPath={activeWorkspace?.rootPath}
+              />
+            )}
+            {isCaptureNavigation(navState) && (
+              <CaptureInboxList
+                items={captureItems}
+                selectedItemId={navState.details?.type === 'item' ? navState.details.id : null}
+                onSelectItem={handleCaptureItemClick}
               />
             )}
             {isSettingsNavigation(navState) && (

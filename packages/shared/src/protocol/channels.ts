@@ -260,6 +260,11 @@ export const RPC_CHANNELS = {
     CAPTURE_HOTKEY_CHANGED: 'app:captureHotkey:changed',
     CAPTURE_HOTKEY_CONFLICT: 'app:captureHotkey:conflict',
   },
+  capture: {
+    SAVE: 'capture:save',
+    LIST: 'capture:list',
+    ENRICH_URL: 'capture:enrichUrl',
+  },
   permissions: {
     GET_DEFAULTS: 'permissions:getDefaults',
     DEFAULTS_CHANGED: 'permissions:defaultsChanged',
