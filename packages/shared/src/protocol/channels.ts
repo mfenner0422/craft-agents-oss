@@ -265,6 +265,10 @@ export const RPC_CHANNELS = {
     LIST: 'capture:list',
     ENRICH_URL: 'capture:enrichUrl',
   },
+  days: {
+    ENSURE: 'days:ensure',
+    LIST: 'days:list',
+  },
   permissions: {
     GET_DEFAULTS: 'permissions:getDefaults',
     DEFAULTS_CHANGED: 'permissions:defaultsChanged',

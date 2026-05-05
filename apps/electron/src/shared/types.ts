@@ -435,6 +435,8 @@ export interface ElectronAPI {
   saveCapture(input: { workspaceId: string; source: string; url?: string; title?: string; body: string; tags?: string[] }): Promise<import('@craft-agent/shared/capture').CaptureItem>
   listCaptureInbox(workspaceId: string, limit?: number): Promise<import('@craft-agent/shared/capture').CaptureItem[]>
   enrichCaptureUrl(url: string): Promise<{ title?: string; description?: string }>
+  ensureDay(workspaceId: string, dateISO?: string): Promise<import('@craft-agent/shared/days').DayRecord>
+  listDays(workspaceId: string, limit?: number): Promise<string[]>
 
   // Folder dialog
   openFolderDialog(): Promise<string | null>
@@ -802,6 +804,12 @@ export interface CaptureNavigationState {
   rightSidebar?: RightSidebarPanel
 }
 
+export interface DaysNavigationState {
+  navigator: 'days'
+  dateISO?: string
+  rightSidebar?: RightSidebarPanel
+}
+
 /**
  * Unified navigation state
  */
@@ -812,6 +820,7 @@ export type NavigationState =
   | SkillsNavigationState
   | AutomationsNavigationState
   | CaptureNavigationState
+  | DaysNavigationState
 
 export const isSessionsNavigation = (
   state: NavigationState
@@ -836,6 +845,10 @@ export const isAutomationsNavigation = (
 export const isCaptureNavigation = (
   state: NavigationState
 ): state is CaptureNavigationState => state.navigator === 'capture'
+
+export const isDaysNavigation = (
+  state: NavigationState
+): state is DaysNavigationState => state.navigator === 'days'
 
 export const DEFAULT_NAVIGATION_STATE: NavigationState = {
   navigator: 'sessions',
@@ -864,6 +877,9 @@ export const getNavigationStateKey = (state: NavigationState): string => {
   }
   if (state.navigator === 'capture') {
     return state.details ? `capture/item/${state.details.id}` : 'capture'
+  }
+  if (state.navigator === 'days') {
+    return state.dateISO ? `days/${state.dateISO}` : 'days'
   }
   if (state.navigator === 'settings') {
     return `settings:${state.subpage}`
@@ -916,6 +932,11 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
   if (key.startsWith('capture/item/')) {
     const id = key.slice(13)
     return id ? { navigator: 'capture', details: { type: 'item', id } } : { navigator: 'capture', details: null }
+  }
+  if (key === 'days') return { navigator: 'days' }
+  if (key.startsWith('days/')) {
+    const dateISO = key.slice(5)
+    return dateISO ? { navigator: 'days', dateISO } : { navigator: 'days' }
   }
 
   // Handle settings

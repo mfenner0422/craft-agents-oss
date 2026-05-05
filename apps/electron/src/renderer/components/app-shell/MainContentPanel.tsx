@@ -32,9 +32,12 @@ import {
   isSkillsNavigation,
   isAutomationsNavigation,
   isCaptureNavigation,
+  isDaysNavigation,
 } from '@/contexts/NavigationContext'
 import { CaptureItemView } from '@craft-agent/ui/capture'
 import type { CaptureItem } from '@craft-agent/shared/capture'
+import { DaysMainPane } from '@craft-agent/ui/days'
+import type { DayRecord } from '@craft-agent/shared/days'
 import { useSessionSelection, useIsMultiSelectActive, useSelectedIds, useSelectionCount } from '@/hooks/useSession'
 import { sourceSelection, skillSelection, automationSelection } from '@/hooks/useEntitySelection'
 import { extractLabelId } from '@craft-agent/shared/labels'
@@ -94,6 +97,7 @@ export function MainContentPanel({
   const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
   const automations = useAtomValue(automationsAtom)
   const [captureItems, setCaptureItems] = useState<CaptureItem[]>([])
+  const [day, setDay] = useState<DayRecord | null>(null)
 
   // Execution history for the selected automation
   const selectedAutomationId = isAutomationsNavigation(navState) ? navState.details?.automationId : undefined
@@ -126,6 +130,11 @@ export function MainContentPanel({
   useEffect(() => {
     if (!activeWorkspaceId || !isCaptureNavigation(navState)) return
     window.electronAPI.listCaptureInbox(activeWorkspaceId).then(setCaptureItems).catch(() => setCaptureItems([]))
+  }, [activeWorkspaceId, navState])
+
+  useEffect(() => {
+    if (!activeWorkspaceId || !isDaysNavigation(navState)) return
+    window.electronAPI.ensureDay(activeWorkspaceId, navState.dateISO).then(setDay).catch(() => setDay(null))
   }, [activeWorkspaceId, navState])
 
   // Source multi-select state
@@ -365,6 +374,14 @@ export function MainContentPanel({
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
         <CaptureItemView item={selected} />
+      </Panel>
+    )
+  }
+
+  if (isDaysNavigation(navState)) {
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <DaysMainPane day={day} />
       </Panel>
     )
   }

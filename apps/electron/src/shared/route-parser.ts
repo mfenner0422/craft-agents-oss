@@ -35,7 +35,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'automations' | 'settings' | 'capture'
+export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'automations' | 'settings' | 'capture' | 'days'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -61,7 +61,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 const COMPOUND_ROUTE_PREFIXES = [
-  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'automations', 'settings', 'capture'
+  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'automations', 'settings', 'capture', 'days'
 ]
 
 /**
@@ -109,6 +109,10 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
       return { navigator: 'capture', details: { type: 'item', id: segments[2] } }
     }
     return { navigator: 'capture', details: null }
+  }
+
+  if (first === 'days') {
+    return { navigator: 'days', details: segments[1] ? { type: 'day', id: segments[1] } : null }
   }
 
   // Sources navigator - supports type filters (api, mcp, local)
@@ -297,6 +301,11 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
     return `capture/item/${parsed.details.id}`
   }
 
+  if (parsed.navigator === 'days') {
+    if (!parsed.details) return 'days'
+    return `days/${parsed.details.id}`
+  }
+
   // Sessions navigator
   let base: string
   const filter = parsed.sessionFilter
@@ -423,6 +432,11 @@ function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute 
   if (compound.navigator === 'capture') {
     if (!compound.details) return { type: 'view', name: 'capture', params: {} }
     return { type: 'view', name: 'capture-item', id: compound.details.id, params: {} }
+  }
+
+  if (compound.navigator === 'days') {
+    if (!compound.details) return { type: 'view', name: 'days', params: {} }
+    return { type: 'view', name: 'days', id: compound.details.id, params: {} }
   }
 
   // Sessions
@@ -565,6 +579,13 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
     }
   }
 
+  if (compound.navigator === 'days') {
+    return {
+      navigator: 'days',
+      dateISO: compound.details?.id,
+    }
+  }
+
   // Sessions
   const filter = compound.sessionFilter || { kind: 'allSessions' as const }
   if (compound.details) {
@@ -635,6 +656,8 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
       return { navigator: 'capture', details: null }
     case 'capture-item':
       return parsed.id ? { navigator: 'capture', details: { type: 'item', id: parsed.id } } : { navigator: 'capture', details: null }
+    case 'days':
+      return { navigator: 'days', dateISO: parsed.id }
     case 'automation-info':
       if (parsed.id) {
         return {
@@ -755,6 +778,13 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
     return {
       navigator: 'capture',
       details: state.details ? { type: 'item', id: state.details.id } : null,
+    }
+  }
+
+  if (state.navigator === 'days') {
+    return {
+      navigator: 'days',
+      details: state.dateISO ? { type: 'day', id: state.dateISO } : null,
     }
   }
 

@@ -182,6 +182,8 @@ export const CHANNEL_MAP = {
   saveCapture: invoke(RPC_CHANNELS.capture.SAVE),
   listCaptureInbox: invoke(RPC_CHANNELS.capture.LIST),
   enrichCaptureUrl: invoke(RPC_CHANNELS.capture.ENRICH_URL),
+  ensureDay: invoke(RPC_CHANNELS.days.ENSURE),
+  listDays: invoke(RPC_CHANNELS.days.LIST),
 
   // Folder dialog
   openFolderDialog: invoke(RPC_CHANNELS.dialog.OPEN_FOLDER),
