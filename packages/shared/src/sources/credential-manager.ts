@@ -61,6 +61,15 @@ import {
 } from '../auth/generic-oauth.ts';
 import { debug } from '../utils/debug.ts';
 import { markSourceAuthenticated, loadSourceConfig, saveSourceConfig } from './storage.ts';
+import {
+  isRockyOnePasswordReference,
+  resolveRockyOnePasswordValue,
+} from '../credentials/backends/rocky-1password-resolver.ts';
+
+function maybeResolveOpRef(value: string | undefined): string | undefined {
+  if (!value) return value;
+  return isRockyOnePasswordReference(value) ? resolveRockyOnePasswordValue(value) : value;
+}
 
 /**
  * Result of authentication attempt
@@ -429,8 +438,8 @@ export class SourceCredentialManager {
           scopes,
           callbackPort,
           callbackUrl: providerCallbackUrl,
-          clientId: api?.googleOAuthClientId,
-          clientSecret: api?.googleOAuthClientSecret,
+          clientId: maybeResolveOpRef(api?.googleOAuthClientId),
+          clientSecret: maybeResolveOpRef(api?.googleOAuthClientSecret),
         });
         break;
       }

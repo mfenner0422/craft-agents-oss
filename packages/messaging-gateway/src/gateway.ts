@@ -6,12 +6,12 @@
  */
 
 import type { ISessionManager } from '@craft-agent/server-core/handlers'
-import type { PushTarget } from '@craft-agent/shared/protocol'
+import type { PushTarget, CredentialResponse } from '@craft-agent/shared/protocol'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { BindingStore } from './binding-store'
 import { Router } from './router'
 import { Commands, type PairingCodeConsumer } from './commands'
-import { Renderer, type SessionEvent } from './renderer'
+import { Renderer, type SessionEvent, type CredentialRequestRegistrar } from './renderer'
 import { PlanTokenRegistry } from './plan-tokens'
 import type {
   PlatformAdapter,
@@ -72,6 +72,15 @@ interface PendingCompactAccept {
   createdAt: number
 }
 
+interface PendingCredential {
+  sessionId: string
+  requestId: string
+  mode: string
+  sourceName: string
+  channelId: string
+  platform: PlatformType
+}
+
 const COMPACT_ACCEPT_TTL_MS = 10 * 60 * 1000
 
 export class MessagingGateway {
@@ -84,6 +93,7 @@ export class MessagingGateway {
   private readonly planTokens: PlanTokenRegistry
   private readonly planMessages = new Map<string, PlanMessageRecord>()
   private readonly pendingCompactAccepts = new Map<string, PendingCompactAccept>()
+  private readonly pendingCredentials = new Map<string, PendingCredential>()
   private readonly adapters = new Map<PlatformType, PlatformAdapter>()
   private readonly log: MessagingLogger
   private started = false
@@ -117,6 +127,18 @@ export class MessagingGateway {
       this.log.child({ component: 'router' }),
     )
     this.planTokens = new PlanTokenRegistry()
+
+    const registerPendingCredential: CredentialRequestRegistrar = (binding, requestId, mode, sourceName) => {
+      this.pendingCredentials.set(binding.channelId, {
+        sessionId: binding.sessionId,
+        requestId,
+        mode,
+        sourceName,
+        channelId: binding.channelId,
+        platform: binding.platform,
+      })
+    }
+
     this.renderer = new Renderer({
       planTokens: this.planTokens,
       // The renderer hands us the exact binding that sent the message.
@@ -131,6 +153,7 @@ export class MessagingGateway {
           messageId,
         })
       },
+      registerPendingCredential,
     })
   }
 
@@ -219,6 +242,14 @@ export class MessagingGateway {
 
   private wireAdapter(adapter: PlatformAdapter): void {
     adapter.onMessage(async (msg: IncomingMessage) => {
+      // Intercept replies for channels awaiting credential input.
+      const pendingCred = this.pendingCredentials.get(msg.channelId)
+      if (pendingCred) {
+        this.pendingCredentials.delete(msg.channelId)
+        await this.handleCredentialReply(adapter, msg, pendingCred)
+        return
+      }
+
       const isCommand = msg.text.trim().startsWith('/')
       if (isCommand) {
         const handled = await this.commands.handleCommand(adapter, msg)
@@ -280,6 +311,41 @@ export class MessagingGateway {
   // -------------------------------------------------------------------------
   // Button handling
   // -------------------------------------------------------------------------
+
+  private async handleCredentialReply(
+    adapter: PlatformAdapter,
+    msg: IncomingMessage,
+    pending: PendingCredential,
+  ): Promise<void> {
+    const text = msg.text.trim()
+
+    if (text === '/cancel') {
+      await this.sessionManager.handleCredentialInput(pending.sessionId, pending.requestId, {
+        type: 'credential',
+        cancelled: true,
+      } as CredentialResponse)
+      await adapter.sendText(msg.channelId, '❌ Authentication cancelled.')
+      return
+    }
+
+    const response: CredentialResponse = {
+      type: 'credential',
+      cancelled: false,
+      value: text,
+    }
+
+    try {
+      await this.sessionManager.handleCredentialInput(pending.sessionId, pending.requestId, response)
+      await adapter.sendText(msg.channelId, `✅ Credential saved for *${pending.sourceName}*. Agent resuming.`)
+    } catch (err) {
+      this.log.error('handleCredentialInput failed', {
+        event: 'credential_input_failed',
+        sessionId: pending.sessionId,
+        error: err,
+      })
+      await adapter.sendText(msg.channelId, '❌ Failed to save credential. Please try again.')
+    }
+  }
 
   private async handleButtonPress(platform: PlatformType, press: ButtonPress): Promise<void> {
     const adapter = this.adapters.get(platform)

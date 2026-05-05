@@ -101,18 +101,41 @@ export type PlanMessageRecorder = (
   messageId: string,
 ) => void
 
+/** Shape of the credential auth request extracted from the auth_request event. */
+interface CredentialAuthRequestData {
+  requestId: string
+  sourceName: string
+  mode: string
+  description?: string
+  hint?: string
+}
+
+/**
+ * Hook the renderer calls when it sends a Telegram credential prompt, so the
+ * gateway can intercept the user's next reply as the credential value.
+ */
+export type CredentialRequestRegistrar = (
+  binding: ChannelBinding,
+  requestId: string,
+  mode: string,
+  sourceName: string,
+) => void
+
 export class Renderer {
   /** Per-binding render state. Keyed by binding.id */
   private states = new Map<string, RenderState>()
   private readonly planTokens: PlanTokenRegistry | undefined
   private readonly recordPlanMessage: PlanMessageRecorder | undefined
+  private readonly registerPendingCredential: CredentialRequestRegistrar | undefined
 
   constructor(deps?: {
     planTokens?: PlanTokenRegistry
     recordPlanMessage?: PlanMessageRecorder
+    registerPendingCredential?: CredentialRequestRegistrar
   }) {
     this.planTokens = deps?.planTokens
     this.recordPlanMessage = deps?.recordPlanMessage
+    this.registerPendingCredential = deps?.registerPendingCredential
   }
 
   private getState(bindingId: string): RenderState {
@@ -147,10 +170,13 @@ export class Renderer {
       await this.handlePermissionRequest(event, binding, adapter, this.getState(binding.id))
       return
     }
-    if (event.type === 'credential_request') {
-      const state = this.getState(binding.id)
-      this.stopTypingPump(state)
-      await this.handleCredentialRequest(binding, adapter)
+    if (event.type === 'auth_request') {
+      const authReq = event.request as CredentialAuthRequestData & { type?: string } | undefined
+      if (authReq?.type === 'credential' && authReq.requestId) {
+        const state = this.getState(binding.id)
+        this.stopTypingPump(state)
+        await this.handleCredentialRequest(binding, adapter, authReq)
+      }
       return
     }
     if (event.type === 'plan_submitted') {
@@ -494,12 +520,28 @@ Approve in the desktop app to continue.`,
   private async handleCredentialRequest(
     binding: ChannelBinding,
     adapter: PlatformAdapter,
+    request: CredentialAuthRequestData,
   ): Promise<void> {
-    if (binding.platform !== 'whatsapp') return
-    await adapter.sendText(
-      binding.channelId,
-      '🔐 Credentials are required to continue. Open the desktop app to review and submit them securely.',
-    )
+    if (binding.platform === 'whatsapp') {
+      await adapter.sendText(
+        binding.channelId,
+        '🔐 Credentials are required to continue. Open the desktop app to review and submit them securely.',
+      )
+      return
+    }
+
+    if (binding.platform !== 'telegram') return
+
+    const lines: string[] = [
+      `🔐 *Authentication required* for *${request.sourceName}*`,
+    ]
+    if (request.description) lines.push(request.description)
+    if (request.hint) lines.push(`_Hint: ${request.hint}_`)
+    lines.push('')
+    lines.push('Reply with your credential, or /cancel to skip.')
+
+    await adapter.sendText(binding.channelId, lines.join('\n'))
+    this.registerPendingCredential?.(binding, request.requestId, request.mode, request.sourceName)
   }
 
   private async handlePlanSubmitted(

@@ -40,6 +40,17 @@ html, body, #root {
   max-width: 100%;
 }
 
+/* In Electron, the BrowserWindow paints the backdrop. In the browser there's
+   no native window underneath, so a transparent body lets the browser canvas
+   (white) bleed through wherever a child doesn't paint bg-background. Anchor
+   the backdrop to --background so dark mode actually looks dark. */
+html {
+  background: var(--background);
+}
+
+html.light { color-scheme: light; }
+html.dark { color-scheme: dark; }
+
 body {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
