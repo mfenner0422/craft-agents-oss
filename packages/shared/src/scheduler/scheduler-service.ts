@@ -8,6 +8,8 @@
 export interface SchedulerTickPayload {
   /** ISO 8601 UTC timestamp */
   timestamp: string;
+  /** Cron-aligned scheduled fire time */
+  scheduledAt: string;
   /** HH:MM in local time */
   localTime: string;
   /** Hour (0-23) */
@@ -64,15 +66,18 @@ export class SchedulerService {
 
     try {
       const now = new Date();
+      const scheduledAt = new Date(now);
+      scheduledAt.setSeconds(0, 0);
       const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
       const payload: SchedulerTickPayload = {
         timestamp: now.toISOString(),
-        localTime: now.toTimeString().slice(0, 5), // HH:MM
-        hour: now.getHours(),
-        minute: now.getMinutes(),
-        dayOfWeek: now.getDay(),
-        dayName: days[now.getDay()]!, // getDay() always returns 0-6
+        scheduledAt: scheduledAt.toISOString(),
+        localTime: scheduledAt.toTimeString().slice(0, 5), // HH:MM
+        hour: scheduledAt.getHours(),
+        minute: scheduledAt.getMinutes(),
+        dayOfWeek: scheduledAt.getDay(),
+        dayName: days[scheduledAt.getDay()]!, // getDay() always returns 0-6
       };
 
       console.log('[SchedulerService] TICK at', payload.localTime, 'UTC:', payload.timestamp);

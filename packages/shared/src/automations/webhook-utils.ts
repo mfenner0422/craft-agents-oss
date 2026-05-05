@@ -39,11 +39,13 @@ export function createWebhookHistoryEntry(opts: {
   attempts?: number;
   error?: string;
   responseBody?: string;
+  recoveredAt?: string;
 }): Record<string, unknown> {
   return {
     id: opts.matcherId,
     ts: Date.now(),
     ok: opts.ok,
+    ...(opts.recoveredAt ? { recovered: true, recoveredAt: opts.recoveredAt } : {}),
     webhook: {
       method: opts.method ?? DEFAULT_WEBHOOK_METHOD,
       url: redactUrl(opts.url),
@@ -65,11 +67,13 @@ export function createPromptHistoryEntry(opts: {
   sessionId?: string;
   prompt?: string;
   error?: string;
+  recoveredAt?: string;
 }): Record<string, unknown> {
   return {
     id: opts.matcherId,
     ts: Date.now(),
     ok: opts.ok,
+    ...(opts.recoveredAt ? { recovered: true, recoveredAt: opts.recoveredAt } : {}),
     ...(opts.sessionId ? { sessionId: opts.sessionId } : {}),
     ...(opts.prompt ? { prompt: opts.prompt.slice(0, HISTORY_FIELD_MAX_LENGTH) } : {}),
     ...(opts.error ? { error: opts.error.slice(0, HISTORY_FIELD_MAX_LENGTH) } : {}),

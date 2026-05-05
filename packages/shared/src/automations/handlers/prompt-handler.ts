@@ -105,6 +105,9 @@ export class PromptHandler implements AutomationHandler {
           permissionMode,
           llmConnection: prompt.llmConnection,
           model: prompt.model,
+          recoveredAt: typeof (payload as unknown as Record<string, unknown>).recoveredAt === 'string'
+            ? (payload as unknown as Record<string, string>).recoveredAt
+            : undefined,
         });
       }
 

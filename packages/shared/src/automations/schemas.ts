@@ -137,6 +137,8 @@ export const AutomationMatcherSchema = z.object({
   permissionMode: z.enum(['safe', 'ask', 'allow-all']).optional(),
   labels: z.array(z.string()).optional(),
   enabled: z.boolean().optional(),
+  recovery: z.enum(['critical', 'soft', 'none']).optional(),
+  recoveryGraceMinutes: z.number().int().positive().optional(),
   conditions: z.array(AutomationConditionSchema).optional(),
   actions: z.array(ActionDefinitionSchema).min(1, 'At least one action required'),
 });

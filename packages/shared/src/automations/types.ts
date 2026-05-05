@@ -159,6 +159,8 @@ export interface AutomationMatcher {
   labels?: string[];
   /** Whether this automation matcher is enabled. Defaults to true. Set to false to disable without removing. */
   enabled?: boolean;
+  recovery?: 'critical' | 'soft' | 'none';
+  recoveryGraceMinutes?: number;
   /** Optional conditions that must all pass (AND) after matcher matches, before actions fire */
   conditions?: AutomationCondition[];
   actions: AutomationAction[];
@@ -236,6 +238,7 @@ export interface PendingPrompt {
   llmConnection?: string;
   /** Model ID for the created session (falls back to provider default if invalid) */
   model?: string;
+  recoveredAt?: string;
 }
 
 export interface AutomationResult {

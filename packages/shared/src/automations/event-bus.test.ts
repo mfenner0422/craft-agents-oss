@@ -213,6 +213,7 @@ describe('WorkspaceEventBus', () => {
       timestamp: Date.now(),
       localTime: '2026-02-10T14:00:00',
       utcTime: '2026-02-10T13:00:00',
+      scheduledAt: '2026-02-10T13:00:00.000Z',
     });
 
     it('should drop events exceeding rate limit (10/min for normal events)', async () => {
@@ -226,7 +227,7 @@ describe('WorkspaceEventBus', () => {
       expect(handler).toHaveBeenCalledTimes(10);
     });
 
-    it('should allow SchedulerTick up to 60/min', async () => {
+    it('should allow SchedulerTick recovery bursts', async () => {
       const handler = jest.fn();
       bus.on('SchedulerTick', handler);
 
@@ -234,7 +235,7 @@ describe('WorkspaceEventBus', () => {
         await bus.emit('SchedulerTick', schedulerPayload());
       }
 
-      expect(handler).toHaveBeenCalledTimes(60);
+      expect(handler).toHaveBeenCalledTimes(65);
     });
 
     it('should reset rate window after 60s', async () => {

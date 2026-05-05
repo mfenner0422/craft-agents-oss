@@ -227,6 +227,9 @@ export class WebhookHandler implements AutomationHandler {
         attempts: result.attempts,
         error: result.error,
         responseBody: result.responseBody,
+        recoveredAt: typeof (payload as unknown as Record<string, unknown>).recoveredAt === 'string'
+          ? (payload as unknown as Record<string, string>).recoveredAt
+          : undefined,
       });
       try {
         await appendAutomationHistoryEntry(this.options.workspaceRootPath, entry);
