@@ -2119,10 +2119,6 @@ export class PiAgent extends BaseAgent {
     this.killSubprocess();
   }
 
-  override refreshWorkspaceConfig(workspace: Workspace): void {
-    this.config.workspace = workspace;
-  }
-
   override clearHistory(): void {
     this.piSessionId = null;
     this.killSubprocess();

@@ -930,6 +930,7 @@
   "settings.workspace.enterWorkspaceName": "Enter workspace name...",
   "settings.workspace.failedToSave": "Failed to save {{setting}}",
   "settings.workspace.icon": "Icon",
+  "settings.workspace.invalidConfig": "Invalid workspace configuration",
   "settings.workspace.localMcpServers": "Local MCP Servers",
   "settings.workspace.localMcpServersDesc": "Enable stdio subprocess servers",
   "settings.workspace.modeCycling": "Mode Cycling",

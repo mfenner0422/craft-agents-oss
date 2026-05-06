@@ -930,6 +930,7 @@
   "settings.workspace.enterWorkspaceName": "Add meg a munkaterület nevét...",
   "settings.workspace.failedToSave": "{{setting}} mentése sikertelen",
   "settings.workspace.icon": "Ikon",
+  "settings.workspace.invalidConfig": "Érvénytelen munkaterület-konfiguráció",
   "settings.workspace.localMcpServers": "Helyi MCP szerverek",
   "settings.workspace.localMcpServersDesc": "stdio alfolyamat-szerverek engedélyezése",
   "settings.workspace.modeCycling": "Módváltás",

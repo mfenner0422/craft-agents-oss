@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { routes } from '@/lib/navigate'
 import { Spinner } from '@craft-agent/ui'
+import { DEFAULT_CAPTURE_HOTKEY } from '@craft-agent/shared/config/preferences'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { NetworkProxySettings } from '../../../shared/types'
 import { toast } from 'sonner'
@@ -273,7 +274,7 @@ export default function AppSettingsPage() {
                     value={captureHotkey}
                     onChange={handleCaptureHotkeyChange}
                     onBlur={handleCaptureHotkeyBlur}
-                    placeholder="CommandOrControl+Alt+Space"
+                    placeholder={DEFAULT_CAPTURE_HOTKEY}
                   />
                 </SettingsCard>
               </SettingsSection>

@@ -520,11 +520,13 @@ export abstract class BaseAgent implements AgentBackend {
 
   setWorkspace(workspace: Workspace): void {
     this.config.workspace = workspace;
+    this.promptBuilder.setWorkspace(workspace);
     // Subclasses should clear session-specific state
   }
 
   refreshWorkspaceConfig(workspace: Workspace): void {
     this.config.workspace = workspace;
+    this.promptBuilder.setWorkspace(workspace);
   }
 
   getSessionId(): string | null {

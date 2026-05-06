@@ -930,6 +930,7 @@
   "settings.workspace.enterWorkspaceName": "输入 Workspace 名称...",
   "settings.workspace.failedToSave": "无法保存 {{setting}}",
   "settings.workspace.icon": "图标",
+  "settings.workspace.invalidConfig": "工作区配置无效",
   "settings.workspace.localMcpServers": "本地 MCP 服务器",
   "settings.workspace.localMcpServersDesc": "启用 stdio 子进程服务器",
   "settings.workspace.modeCycling": "模式切换",
