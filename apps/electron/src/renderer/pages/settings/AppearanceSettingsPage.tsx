@@ -146,6 +146,24 @@ export default function AppearanceSettingsPage() {
     await window.electronAPI?.setRichToolDescriptions?.(checked)
   }, [])
 
+  // Days menubar toggles (macOS only)
+  const isMac = typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac')
+  const [daysTrayEnabled, setDaysTrayEnabled] = useState(true)
+  const [daysTrayAlwaysOnTop, setDaysTrayAlwaysOnTop] = useState(true)
+  useEffect(() => {
+    if (!isMac) return
+    window.electronAPI?.getDaysTrayEnabled?.().then(setDaysTrayEnabled).catch(() => {})
+    window.electronAPI?.getDaysTrayDetachedAlwaysOnTop?.().then(setDaysTrayAlwaysOnTop).catch(() => {})
+  }, [isMac])
+  const handleDaysTrayEnabledChange = useCallback(async (checked: boolean) => {
+    setDaysTrayEnabled(checked)
+    await window.electronAPI?.setDaysTrayEnabled?.(checked)
+  }, [])
+  const handleDaysTrayAlwaysOnTopChange = useCallback(async (checked: boolean) => {
+    setDaysTrayAlwaysOnTop(checked)
+    await window.electronAPI?.setDaysTrayDetachedAlwaysOnTop?.(checked)
+  }, [])
+
   // Load preset themes on mount
   useEffect(() => {
     const loadThemes = async () => {
@@ -366,6 +384,26 @@ export default function AppearanceSettingsPage() {
                   />
                 </SettingsCard>
               </SettingsSection>
+
+              {/* Days menubar (macOS) */}
+              {isMac && (
+                <SettingsSection title="Days menubar">
+                  <SettingsCard>
+                    <SettingsToggle
+                      label="Show Days in the menubar"
+                      description="A small calendar icon with today's date that opens a quick view of your tasks and notes."
+                      checked={daysTrayEnabled}
+                      onCheckedChange={handleDaysTrayEnabledChange}
+                    />
+                    <SettingsToggle
+                      label="Float when detached"
+                      description="When you drag the popover off the menubar, keep it above other windows."
+                      checked={daysTrayAlwaysOnTop}
+                      onCheckedChange={handleDaysTrayAlwaysOnTopChange}
+                    />
+                  </SettingsCard>
+                </SettingsSection>
+              )}
 
               {/* Tool Icons — shows the command → icon mapping used in turn cards */}
               <SettingsSection

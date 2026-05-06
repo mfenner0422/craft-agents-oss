@@ -424,6 +424,16 @@ client.onConnectionStateChanged((state) => {
 // i18n: sync language changes to main process (for native menus/dialogs)
 ;(api as ElectronAPI).changeLanguage = (lang: string) => ipcRenderer.invoke('i18n:changeLanguage', lang)
 
+// Days tray popover — direct IPC (window-scoped, no WS RPC needed)
+;(api as ElectronAPI).openDaysInWorkspace = (workspaceId: string, dateISO?: string) =>
+  ipcRenderer.invoke('daysTray:openDays', workspaceId, dateISO)
+;(api as ElectronAPI).closeDaysTrayPopover = () => ipcRenderer.invoke('daysTray:closePopover')
+;(api as ElectronAPI).onDaysTrayMode = (cb: (mode: 'anchored' | 'detached') => void) => {
+  const handler = (_e: any, mode: 'anchored' | 'detached') => cb(mode)
+  ipcRenderer.on('daysTray:mode', handler)
+  return () => { ipcRenderer.removeListener('daysTray:mode', handler) }
+}
+
 // webUtils.getPathForFile: returns the absolute OS path of a File object obtained
 // from <input type="file"> or OS drag-drop. Returns null for Files fabricated from
 // Blobs (clipboard paste, web-drag) — those are content-only, no filesystem path.

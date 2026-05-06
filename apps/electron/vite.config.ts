@@ -44,6 +44,7 @@ export default defineConfig({
         main: resolve(__dirname, 'src/renderer/index.html'),
         playground: resolve(__dirname, 'src/renderer/playground.html'),
         capture: resolve(__dirname, 'src/renderer/capture.html'),
+        'days-tray': resolve(__dirname, 'src/renderer/days-tray.html'),
         'browser-toolbar': resolve(__dirname, 'src/renderer/browser-toolbar.html'),
         'browser-empty-state': resolve(__dirname, 'src/renderer/browser-empty-state.html'),
       }

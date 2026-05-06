@@ -193,6 +193,8 @@ let browserPaneManager: BrowserPaneManager | null = null
 let oauthFlowStore: OAuthFlowStore | null = null
 let moduleSink: EventSink | null = null
 let moduleClientResolver: ((webContentsId: number) => string | undefined) | null = null
+let daysTray: import('./tray/days-tray').DaysTray | null = null
+let lastFocusedWorkspaceId: string | null = null
 
 // Messaging gateway: the bootstrap handle is created once sessionManager is
 // available (inside createHandlerDeps) and populated with the WS publisher
@@ -726,6 +728,84 @@ app.whenReady().then(async () => {
       instance.wsServer.handle(RPC_CHANNELS.capture.OPEN, async (_ctx, workspaceId: string) => {
         openCaptureWindow(workspaceId)
       })
+
+      // -----------------------------------------------------------------------
+      // Days menubar tray (macOS only) + cross-platform pref handlers
+      // -----------------------------------------------------------------------
+      const trayStorage = await import('@craft-agent/shared/config/storage')
+      instance.wsServer.handle(RPC_CHANNELS.daysTray.GET_ENABLED, async () => trayStorage.getDaysTrayEnabled())
+      instance.wsServer.handle(RPC_CHANNELS.daysTray.GET_DETACHED_ALWAYS_ON_TOP, async () => trayStorage.getDaysTrayDetachedAlwaysOnTop())
+
+      if (process.platform === 'darwin') {
+        const { DaysTray } = await import('./tray/days-tray')
+        const storage = trayStorage
+
+        const startTray = () => {
+          if (daysTray) return
+          daysTray = new DaysTray({
+            getActiveWorkspaceId: () => {
+              const focused = BrowserWindow.getFocusedWindow()
+              if (focused && windowManager) {
+                const wsId = windowManager.getWorkspaceForWindow(focused.webContents.id)
+                if (wsId) {
+                  lastFocusedWorkspaceId = wsId
+                  return wsId
+                }
+              }
+              if (lastFocusedWorkspaceId) return lastFocusedWorkspaceId
+              const all = getWorkspaces()
+              return all.length > 0 ? all[0].id : null
+            },
+            getDetachedAlwaysOnTop: () => storage.getDaysTrayDetachedAlwaysOnTop(),
+            setDetachedAlwaysOnTop: (enabled) => storage.setDaysTrayDetachedAlwaysOnTop(enabled),
+            openDays: (workspaceId) => {
+              if (!workspaceId || !windowManager) return
+              const win = windowManager.focusOrCreateWindow(workspaceId)
+              win.webContents.send('daysTray:navigateToDays')
+            },
+          })
+          daysTray.start()
+        }
+
+        if (storage.getDaysTrayEnabled()) startTray()
+
+        ipcMain.handle('daysTray:openDays', async (_event, workspaceId: string, _dateISO?: string) => {
+          if (!workspaceId || !windowManager) return
+          const win = windowManager.focusOrCreateWindow(workspaceId)
+          win.webContents.send('daysTray:navigateToDays')
+          daysTray?.closePopoverFromRenderer()
+        })
+        ipcMain.handle('daysTray:closePopover', async () => {
+          daysTray?.closePopoverFromRenderer()
+        })
+
+        // Track focused workspace so tray click respects last-focused window
+        app.on('browser-window-focus', (_event, win) => {
+          if (!windowManager) return
+          const wsId = windowManager.getWorkspaceForWindow(win.webContents.id)
+          if (wsId) lastFocusedWorkspaceId = wsId
+        })
+
+        // SET handlers with side-effects on the running tray
+        instance.wsServer.handle(RPC_CHANNELS.daysTray.SET_ENABLED, async (_ctx, enabled: boolean) => {
+          storage.setDaysTrayEnabled(enabled)
+          if (enabled) startTray()
+          else if (daysTray) { daysTray.stop(); daysTray = null }
+        })
+        instance.wsServer.handle(RPC_CHANNELS.daysTray.SET_DETACHED_ALWAYS_ON_TOP, async (_ctx, enabled: boolean) => {
+          storage.setDaysTrayDetachedAlwaysOnTop(enabled)
+          daysTray?.notifyDetachedAlwaysOnTopChanged()
+        })
+      } else {
+        // Non-macOS: SET handlers persist the value but no tray is created
+        instance.wsServer.handle(RPC_CHANNELS.daysTray.SET_ENABLED, async (_ctx, enabled: boolean) => {
+          trayStorage.setDaysTrayEnabled(enabled)
+        })
+        instance.wsServer.handle(RPC_CHANNELS.daysTray.SET_DETACHED_ALWAYS_ON_TOP, async (_ctx, enabled: boolean) => {
+          trayStorage.setDaysTrayDetachedAlwaysOnTop(enabled)
+        })
+      }
+
       oauthFlowStore = instance.oauthFlowStore
       moduleSink = instance.wsServer.push.bind(instance.wsServer)
       moduleClientResolver = resolveClientId
@@ -1126,6 +1206,10 @@ app.on('before-quit', async (event) => {
 
   // Ensure Cmd+Q/app quit bypasses layered window close interception (Cmd+W behavior).
   windowManager?.setAppQuitting(true)
+
+  // Tear down the Days menubar tray (macOS) so the icon disappears immediately.
+  daysTray?.stop()
+  daysTray = null
 
   if (windowManager) {
     // Get full window states (includes bounds, type, and query)

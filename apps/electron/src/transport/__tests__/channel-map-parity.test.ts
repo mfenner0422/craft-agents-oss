@@ -28,6 +28,9 @@ type ApiToChannelMapKeys = Exclude<
   | 'onTransferProgress' // direct IPC listener — chunk upload progress
   | 'changeLanguage' // direct IPC to main process — syncs i18n language
   | 'getFilePath' // renderer-local — webUtils.getPathForFile, no IPC round-trip
+  | 'openDaysInWorkspace' // direct IPC to main process — focuses Days in workspace window
+  | 'closeDaysTrayPopover' // direct IPC to main process — hides the menubar popover
+  | 'onDaysTrayMode' // direct IPC listener — anchored/detached state changes
 > | BrowserPaneKeys
 type ChannelMapKeys = keyof typeof CHANNEL_MAP & string
 

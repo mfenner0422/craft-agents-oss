@@ -153,6 +153,12 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.appearance.GET_RICH_TOOL_DESCRIPTIONS,
   RPC_CHANNELS.appearance.SET_RICH_TOOL_DESCRIPTIONS,
 
+  // daysTray — local-only menubar preferences (macOS)
+  RPC_CHANNELS.daysTray.GET_ENABLED,
+  RPC_CHANNELS.daysTray.SET_ENABLED,
+  RPC_CHANNELS.daysTray.GET_DETACHED_ALWAYS_ON_TOP,
+  RPC_CHANNELS.daysTray.SET_DETACHED_ALWAYS_ON_TOP,
+
   // caching — prompt cache and context settings
   RPC_CHANNELS.caching.GET_EXTENDED_PROMPT_CACHE,
   RPC_CHANNELS.caching.SET_EXTENDED_PROMPT_CACHE,
