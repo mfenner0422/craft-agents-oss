@@ -991,6 +991,7 @@
   "shortcuts.renameSession": "セッション名を変更",
   "shortcuts.sendMessage": "メッセージを送信",
   "shortcuts.sessionList": "セッションリスト",
+  "shortcuts.setStatusByPosition": "Set status by position",
   "shortcuts.title": "キーボードショートカット",
   "sidebar.agentic": "エージェント",
   "sidebar.allAutomations": "すべての自動化",

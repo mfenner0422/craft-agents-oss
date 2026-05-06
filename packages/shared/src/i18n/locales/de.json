@@ -991,6 +991,7 @@
   "shortcuts.renameSession": "Sitzung umbenennen",
   "shortcuts.sendMessage": "Nachricht senden",
   "shortcuts.sessionList": "Sitzungsliste",
+  "shortcuts.setStatusByPosition": "Set status by position",
   "shortcuts.title": "Tastaturkürzel",
   "sidebar.agentic": "Agentisch",
   "sidebar.allAutomations": "Alle Automatisierungen",

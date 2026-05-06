@@ -991,6 +991,7 @@
   "shortcuts.renameSession": "重命名会话",
   "shortcuts.sendMessage": "发送消息",
   "shortcuts.sessionList": "会话列表",
+  "shortcuts.setStatusByPosition": "按位置设置状态",
   "shortcuts.title": "键盘快捷键",
   "sidebar.agentic": "智能体",
   "sidebar.allAutomations": "所有自动化",

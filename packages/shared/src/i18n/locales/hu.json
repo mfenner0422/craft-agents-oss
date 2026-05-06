@@ -991,6 +991,7 @@
   "shortcuts.renameSession": "Munkamenet átnevezése",
   "shortcuts.sendMessage": "Üzenet küldése",
   "shortcuts.sessionList": "Munkamenetek listája",
+  "shortcuts.setStatusByPosition": "Set status by position",
   "shortcuts.title": "Billentyűparancsok",
   "sidebar.agentic": "Ügynök alapú",
   "sidebar.allAutomations": "Összes automatizálás",

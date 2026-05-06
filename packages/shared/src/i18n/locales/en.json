@@ -991,6 +991,7 @@
   "shortcuts.renameSession": "Rename session",
   "shortcuts.sendMessage": "Send message",
   "shortcuts.sessionList": "Session List",
+  "shortcuts.setStatusByPosition": "Set status by position",
   "shortcuts.title": "Keyboard Shortcuts",
   "sidebar.agentic": "Agentic",
   "sidebar.allAutomations": "All Automations",
