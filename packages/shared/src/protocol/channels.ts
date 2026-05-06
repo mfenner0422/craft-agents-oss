@@ -251,6 +251,28 @@ export const RPC_CHANNELS = {
     WRITE_IMAGE: 'workspace:writeImage',
     SETTINGS_GET: 'workspaceSettings:get',
     SETTINGS_UPDATE: 'workspaceSettings:update',
+    SETTINGS_CHANGED: 'workspaceSettings:changed',
+    SETTINGS_INVALID: 'workspaceSettings:invalid',
+  },
+  app: {
+    GET_CAPTURE_HOTKEY: 'app:captureHotkey:get',
+    SET_CAPTURE_HOTKEY: 'app:captureHotkey:set',
+    CAPTURE_HOTKEY_CHANGED: 'app:captureHotkey:changed',
+    CAPTURE_HOTKEY_CONFLICT: 'app:captureHotkey:conflict',
+  },
+  capture: {
+    SAVE: 'capture:save',
+    LIST: 'capture:list',
+    ENRICH_URL: 'capture:enrichUrl',
+    SAVED: 'capture:saved',
+    OPEN: 'capture:open',
+  },
+  days: {
+    ENSURE: 'days:ensure',
+    LIST: 'days:list',
+    INCOMPLETE_TASKS: 'days:incompleteTasks',
+    PULL_FORWARD: 'days:pullForward',
+    UPDATE_FILE: 'days:updateFile',
   },
   permissions: {
     GET_DEFAULTS: 'permissions:getDefaults',

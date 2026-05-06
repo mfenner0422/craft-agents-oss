@@ -59,6 +59,9 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.shell.OPEN_FILE,
   RPC_CHANNELS.shell.SHOW_IN_FOLDER,
 
+  // capture — open capture window (Electron-only)
+  RPC_CHANNELS.capture.OPEN,
+
   // skills — local filesystem actions (guarded for remote)
   RPC_CHANNELS.skills.OPEN_EDITOR,
   RPC_CHANNELS.skills.OPEN_FINDER,
@@ -198,6 +201,12 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.settings.GET_NETWORK_PROXY,
   RPC_CHANNELS.settings.SET_NETWORK_PROXY,
 
+  // app — local app-level settings
+  RPC_CHANNELS.app.GET_CAPTURE_HOTKEY,
+  RPC_CHANNELS.app.SET_CAPTURE_HOTKEY,
+  RPC_CHANNELS.app.CAPTURE_HOTKEY_CHANGED,
+  RPC_CHANNELS.app.CAPTURE_HOTKEY_CONFLICT,
+
   // server config — local embedded server settings
   RPC_CHANNELS.settings.GET_SERVER_CONFIG,
   RPC_CHANNELS.settings.SET_SERVER_CONFIG,
@@ -274,6 +283,19 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
 
   // credentials — remote server's credential state
   RPC_CHANNELS.credentials.HEALTH_CHECK,
+
+  // capture — workspace vault content
+  RPC_CHANNELS.capture.SAVE,
+  RPC_CHANNELS.capture.LIST,
+  RPC_CHANNELS.capture.ENRICH_URL,
+  RPC_CHANNELS.capture.SAVED,
+
+  // days — workspace vault content
+  RPC_CHANNELS.days.ENSURE,
+  RPC_CHANNELS.days.LIST,
+  RPC_CHANNELS.days.INCOMPLETE_TASKS,
+  RPC_CHANNELS.days.PULL_FORWARD,
+  RPC_CHANNELS.days.UPDATE_FILE,
 
   // llmConnections — LLM config lives on server running workspace
   RPC_CHANNELS.llmConnections.LIST,
@@ -353,6 +375,8 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.workspace.WRITE_IMAGE,
   RPC_CHANNELS.workspace.SETTINGS_GET,
   RPC_CHANNELS.workspace.SETTINGS_UPDATE,
+  RPC_CHANNELS.workspace.SETTINGS_CHANGED,
+  RPC_CHANNELS.workspace.SETTINGS_INVALID,
 
   // permissions — workspace permissions
   RPC_CHANNELS.permissions.GET_DEFAULTS,

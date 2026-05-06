@@ -173,6 +173,22 @@ export const CHANNEL_MAP = {
   // Workspace Settings
   getWorkspaceSettings: invoke(RPC_CHANNELS.workspace.SETTINGS_GET),
   updateWorkspaceSetting: invoke(RPC_CHANNELS.workspace.SETTINGS_UPDATE),
+  onWorkspaceSettingsChanged: listener(RPC_CHANNELS.workspace.SETTINGS_CHANGED),
+  onWorkspaceSettingsInvalid: listener(RPC_CHANNELS.workspace.SETTINGS_INVALID),
+  getCaptureHotkey: invoke(RPC_CHANNELS.app.GET_CAPTURE_HOTKEY),
+  setCaptureHotkey: invoke(RPC_CHANNELS.app.SET_CAPTURE_HOTKEY),
+  onCaptureHotkeyChanged: listener(RPC_CHANNELS.app.CAPTURE_HOTKEY_CHANGED),
+  onCaptureHotkeyConflict: listener(RPC_CHANNELS.app.CAPTURE_HOTKEY_CONFLICT),
+  saveCapture: invoke(RPC_CHANNELS.capture.SAVE),
+  listCaptureInbox: invoke(RPC_CHANNELS.capture.LIST),
+  enrichCaptureUrl: invoke(RPC_CHANNELS.capture.ENRICH_URL),
+  openCaptureWindow: invoke(RPC_CHANNELS.capture.OPEN),
+  onCaptureSaved: listener(RPC_CHANNELS.capture.SAVED),
+  ensureDay: invoke(RPC_CHANNELS.days.ENSURE),
+  listDays: invoke(RPC_CHANNELS.days.LIST),
+  getIncompleteDayTasks: invoke(RPC_CHANNELS.days.INCOMPLETE_TASKS),
+  pullForwardDayTasks: invoke(RPC_CHANNELS.days.PULL_FORWARD),
+  updateDayFile: invoke(RPC_CHANNELS.days.UPDATE_FILE),
 
   // Folder dialog
   openFolderDialog: invoke(RPC_CHANNELS.dialog.OPEN_FOLDER),

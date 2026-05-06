@@ -19,6 +19,7 @@ import type { SessionMeta } from "@/atoms/sessions"
 import { messagingBindingsBySessionAtom } from "@/atoms/messaging"
 import { useAtomValue } from "jotai"
 import { extractLabelId } from "@craft-agent/shared/labels"
+import { useDraggable } from "@dnd-kit/core"
 
 const PLATFORM_PILL: Record<'telegram' | 'whatsapp', { label: string; colorClass: string }> = {
   telegram: {
@@ -74,6 +75,11 @@ export function SessionItem({
   const messagingBindingsBySession = useAtomValue(messagingBindingsBySessionAtom)
   const sessionBindings = messagingBindingsBySession.get(item.id) ?? []
   const hasMessagingBinding = sessionBindings.length > 0
+  const draggable = useDraggable({
+    id: `session:${item.id}`,
+    data: { type: 'session', sessionId: item.id, title },
+  })
+  const itemRef = (itemProps as { ref?: (el: HTMLElement | null) => void }).ref
 
   const handleClick = (e: React.MouseEvent) => {
     ctx.onFocusZone()
@@ -113,6 +119,12 @@ export function SessionItem({
       onMouseDown={handleClick}
       buttonProps={{
         ...itemProps,
+        ...draggable.attributes,
+        ...draggable.listeners,
+        ref: (el: HTMLButtonElement | null) => {
+          draggable.setNodeRef(el)
+          itemRef?.(el)
+        },
         onKeyDown: (e: React.KeyboardEvent) => {
           ;(itemProps as { onKeyDown: (event: React.KeyboardEvent) => void }).onKeyDown(e)
           ctx.onKeyDown(e, item)

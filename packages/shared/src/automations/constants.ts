@@ -7,6 +7,9 @@ export const AUTOMATIONS_HISTORY_FILE = 'automations-history.jsonl';
 /** Persistent retry queue filename */
 export const AUTOMATIONS_RETRY_QUEUE_FILE = 'automations-retry-queue.jsonl';
 
+/** Last scheduled run watermark filename */
+export const AUTOMATIONS_LAST_RUN_FILE = 'automations-last-run.json';
+
 /** Default HTTP method for webhook actions */
 export const DEFAULT_WEBHOOK_METHOD = 'POST';
 

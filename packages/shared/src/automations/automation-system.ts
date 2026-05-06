@@ -18,14 +18,17 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { resolveAutomationsConfigPath, generateShortId } from './resolve-config-path.ts';
-import { compactAutomationHistorySync } from './history-store.ts';
+import { appendAutomationHistoryEntry, compactAutomationHistorySync } from './history-store.ts';
 import { createLogger } from '../utils/debug.ts';
 import { WorkspaceEventBus, type EventPayloadMap } from './event-bus.ts';
 import { PromptHandler, EventLogHandler, WebhookHandler, type AutomationsConfigProvider } from './handlers/index.ts';
 import { type AutomationsConfig, type AutomationEvent, type AutomationMatcher, type PendingPrompt, type WebhookActionResult, type AppEvent, type AgentEvent, type SdkAutomationCallbackMatcher, type SdkAutomationInput } from './types.ts';
 import { validateAutomationsConfig } from './validation.ts';
-import { matcherMatchesSdk } from './utils.ts';
+import { matcherMatches, matcherMatchesSdk } from './utils.ts';
 import { SchedulerService, type SchedulerTickPayload } from '../scheduler/scheduler-service.ts';
+import { readLastRun, writeLastRun } from './last-run-store.ts';
+import { computeMissedFirings } from './recovery.ts';
+import { createSkippedRecoveryEntry } from './webhook-utils.ts';
 
 const log = createLogger('automation-system');
 
@@ -72,6 +75,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
   private eventLogHandler: EventLogHandler | null = null;
   private scheduler: SchedulerService | null = null;
   private disposed = false;
+  private recoverySweepInProgress = false;
 
   // Session metadata tracking (moved from SessionManager)
   private readonly lastKnownMetadata: Map<string, SessionMetadataSnapshot> = new Map();
@@ -86,9 +90,12 @@ export class AutomationSystem implements AutomationsConfigProvider {
     // Create handlers
     this.createHandlers();
 
-    // Start scheduler if enabled
+    // Start scheduler if enabled. Boot recovery completes before live ticks start,
+    // so the first scheduler tick cannot race the persisted recovery watermark.
     if (options.enableScheduler) {
-      this.startScheduler();
+      void this.runRecoverySweep('boot').finally(() => {
+        if (!this.disposed) this.startScheduler();
+      });
     }
 
     log.debug(`[AutomationSystem] Created for workspace: ${options.workspaceId}`);
@@ -290,11 +297,12 @@ export class AutomationSystem implements AutomationsConfigProvider {
     if (this.scheduler) return;
 
     this.scheduler = new SchedulerService(async (payload: SchedulerTickPayload) => {
-      await this.eventBus.emit('SchedulerTick', {
+      await this.emitSchedulerTick({
         workspaceId: this.options.workspaceId,
         timestamp: Date.now(),
         localTime: payload.localTime,
         utcTime: payload.timestamp,
+        scheduledAt: payload.scheduledAt,
       });
     });
 
@@ -313,6 +321,71 @@ export class AutomationSystem implements AutomationsConfigProvider {
     }
   }
 
+
+  notifyResume(): void {
+    void this.runRecoverySweep('wake');
+  }
+
+  private async runRecoverySweep(reason: 'boot' | 'wake'): Promise<void> {
+    if (this.recoverySweepInProgress) return;
+    this.recoverySweepInProgress = true;
+    try {
+      const last = readLastRun(this.options.workspaceRootPath);
+      const matchers = this.getMatchersForEvent('SchedulerTick');
+      const now = new Date();
+      const recoveredAt = now.toISOString();
+      for (const matcher of matchers) {
+        if (!matcher.id || !matcher.cron) continue;
+        const missed = computeMissedFirings(matcher, last[matcher.id], now);
+        const recovery = matcher.recovery ?? 'soft';
+        const graceMs = (matcher.recoveryGraceMinutes ?? 120) * 60_000;
+        for (const firing of missed) {
+          const scheduledTime = new Date(firing.scheduledAt).getTime();
+          const shouldDispatch = recovery === 'critical'
+            || (recovery === 'soft' && now.getTime() - scheduledTime <= graceMs);
+
+          if (!shouldDispatch) {
+            await appendAutomationHistoryEntry(this.options.workspaceRootPath, createSkippedRecoveryEntry({
+              matcherId: matcher.id,
+              scheduledAt: firing.scheduledAt,
+              recoveredAt,
+              recovery,
+              reason: recovery === 'none' ? 'recovery disabled' : 'outside recovery grace window',
+            }));
+            await writeLastRun(this.options.workspaceRootPath, matcher.id, firing.scheduledAt);
+            continue;
+          }
+
+          const scheduledAt = new Date(firing.scheduledAt);
+          log.debug(`[AutomationSystem] Recovering ${matcher.id} (${reason}) scheduledAt=${firing.scheduledAt}`);
+          await this.emitSchedulerTick({
+            workspaceId: this.options.workspaceId,
+            timestamp: Date.now(),
+            localTime: scheduledAt.toTimeString().slice(0, 5),
+            utcTime: firing.scheduledAt,
+            scheduledAt: firing.scheduledAt,
+            recoveredAt,
+            recoveredMatcherId: matcher.id,
+          });
+        }
+      }
+    } finally {
+      this.recoverySweepInProgress = false;
+    }
+  }
+
+  private async emitSchedulerTick(payload: EventPayloadMap['SchedulerTick']): Promise<void> {
+    const matchers = this.getMatchersForEvent('SchedulerTick');
+    for (const matcher of matchers) {
+      if (!matcher.id) continue;
+      if (matcherMatches(matcher, 'SchedulerTick', payload as unknown as Record<string, unknown>)) {
+        // Persist the cron-aligned scheduled firing time at dispatch, before
+        // handler fan-out. Handler failures are logged but not retried by recovery.
+        await writeLastRun(this.options.workspaceRootPath, matcher.id, payload.scheduledAt);
+      }
+    }
+    await this.eventBus.emit('SchedulerTick', payload);
+  }
   // ============================================================================
   // Session Metadata Diffing
   // ============================================================================

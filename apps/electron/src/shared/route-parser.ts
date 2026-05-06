@@ -35,7 +35,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'automations' | 'settings'
+export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'automations' | 'settings' | 'capture' | 'days'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -61,8 +61,9 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 const COMPOUND_ROUTE_PREFIXES = [
-  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'automations', 'settings'
+  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'automations', 'settings', 'capture', 'days'
 ]
+const DAY_ISO_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
 /**
  * Check if a route is a compound route (new format)
@@ -102,6 +103,18 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
       navigator: 'settings',
       details: { type: subpage, id: subpage },
     }
+  }
+
+  if (first === 'capture') {
+    if (segments[1] === 'item' && segments[2]) {
+      return { navigator: 'capture', details: { type: 'item', id: segments[2] } }
+    }
+    return { navigator: 'capture', details: null }
+  }
+
+  if (first === 'days') {
+    const dateISO = segments[1]
+    return { navigator: 'days', details: dateISO && DAY_ISO_PATTERN.test(dateISO) ? { type: 'day', id: dateISO } : null }
   }
 
   // Sources navigator - supports type filters (api, mcp, local)
@@ -285,6 +298,16 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
     return `${base}/automation/${parsed.details.id}`
   }
 
+  if (parsed.navigator === 'capture') {
+    if (!parsed.details) return 'capture'
+    return `capture/item/${parsed.details.id}`
+  }
+
+  if (parsed.navigator === 'days') {
+    if (!parsed.details) return 'days'
+    return `days/${parsed.details.id}`
+  }
+
   // Sessions navigator
   let base: string
   const filter = parsed.sessionFilter
@@ -406,6 +429,16 @@ function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute 
       return { type: 'view', name: 'automations', params: {} }
     }
     return { type: 'view', name: 'automation-info', id: compound.details.id, params: {} }
+  }
+
+  if (compound.navigator === 'capture') {
+    if (!compound.details) return { type: 'view', name: 'capture', params: {} }
+    return { type: 'view', name: 'capture-item', id: compound.details.id, params: {} }
+  }
+
+  if (compound.navigator === 'days') {
+    if (!compound.details) return { type: 'view', name: 'days', params: {} }
+    return { type: 'view', name: 'days', id: compound.details.id, params: {} }
   }
 
   // Sessions
@@ -541,6 +574,20 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
     }
   }
 
+  if (compound.navigator === 'capture') {
+    return {
+      navigator: 'capture',
+      details: compound.details ? { type: 'item', id: compound.details.id } : null,
+    }
+  }
+
+  if (compound.navigator === 'days') {
+    return {
+      navigator: 'days',
+      dateISO: compound.details?.id,
+    }
+  }
+
   // Sessions
   const filter = compound.sessionFilter || { kind: 'allSessions' as const }
   if (compound.details) {
@@ -607,6 +654,12 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
       return { navigator: 'skills', details: null }
     case 'automations':
       return { navigator: 'automations', details: null }
+    case 'capture':
+      return { navigator: 'capture', details: null }
+    case 'capture-item':
+      return parsed.id ? { navigator: 'capture', details: { type: 'item', id: parsed.id } } : { navigator: 'capture', details: null }
+    case 'days':
+      return { navigator: 'days', dateISO: parsed.id && DAY_ISO_PATTERN.test(parsed.id) ? parsed.id : undefined }
     case 'automation-info':
       if (parsed.id) {
         return {
@@ -720,6 +773,20 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
       navigator: 'automations',
       automationFilter: state.filter ?? undefined,
       details: state.details ? { type: 'automation', id: state.details.automationId } : null,
+    }
+  }
+
+  if (state.navigator === 'capture') {
+    return {
+      navigator: 'capture',
+      details: state.details ? { type: 'item', id: state.details.id } : null,
+    }
+  }
+
+  if (state.navigator === 'days') {
+    return {
+      navigator: 'days',
+      details: state.dateISO ? { type: 'day', id: state.dateISO } : null,
     }
   }
 

@@ -426,6 +426,22 @@ export interface ElectronAPI {
   // Workspace Settings (per-workspace configuration)
   getWorkspaceSettings(workspaceId: string): Promise<WorkspaceSettings | null>
   updateWorkspaceSetting<K extends keyof WorkspaceSettings>(workspaceId: string, key: K, value: WorkspaceSettings[K]): Promise<void>
+  onWorkspaceSettingsChanged(callback: (payload: { workspaceId: string; settings: WorkspaceSettings | null }) => void): () => void
+  onWorkspaceSettingsInvalid(callback: (payload: { workspaceId: string; issues: Array<{ field: string; message: string }> }) => void): () => void
+  getCaptureHotkey(): Promise<string>
+  setCaptureHotkey(accelerator: string): Promise<{ ok: boolean; error?: string }>
+  onCaptureHotkeyChanged(callback: (accelerator: string) => void): () => void
+  onCaptureHotkeyConflict(callback: (payload: { accelerator: string; error: string }) => void): () => void
+  saveCapture(input: { workspaceId: string; source: string; url?: string; title?: string; body: string; tags?: string[] }): Promise<import('@craft-agent/shared/capture').CaptureItem>
+  listCaptureInbox(workspaceId: string, limit?: number): Promise<import('@craft-agent/shared/capture').CaptureItem[]>
+  enrichCaptureUrl(url: string): Promise<{ title?: string; description?: string }>
+  openCaptureWindow(workspaceId: string): Promise<void>
+  onCaptureSaved(callback: (payload: { workspaceId: string; item: import('@craft-agent/shared/capture').CaptureItem }) => void): () => void
+  ensureDay(workspaceId: string, dateISO?: string): Promise<import('@craft-agent/shared/days').DayRecord>
+  listDays(workspaceId: string, limit?: number): Promise<string[]>
+  getIncompleteDayTasks(workspaceId: string, dateISO: string): Promise<import('@craft-agent/shared/days').DayTask[]>
+  pullForwardDayTasks(workspaceId: string, fromDateISO: string, toDateISO: string): Promise<import('@craft-agent/shared/days').DayTask[]>
+  updateDayFile(workspaceId: string, dateISO: string, kind: import('@craft-agent/shared/days').DayFileKind, content: string): Promise<import('@craft-agent/shared/days').DayRecord>
 
   // Folder dialog
   openFolderDialog(): Promise<string | null>
@@ -787,6 +803,18 @@ export interface AutomationsNavigationState {
   rightSidebar?: RightSidebarPanel
 }
 
+export interface CaptureNavigationState {
+  navigator: 'capture'
+  details: { type: 'item'; id: string } | null
+  rightSidebar?: RightSidebarPanel
+}
+
+export interface DaysNavigationState {
+  navigator: 'days'
+  dateISO?: string
+  rightSidebar?: RightSidebarPanel
+}
+
 /**
  * Unified navigation state
  */
@@ -796,6 +824,8 @@ export type NavigationState =
   | SettingsNavigationState
   | SkillsNavigationState
   | AutomationsNavigationState
+  | CaptureNavigationState
+  | DaysNavigationState
 
 export const isSessionsNavigation = (
   state: NavigationState
@@ -816,6 +846,14 @@ export const isSkillsNavigation = (
 export const isAutomationsNavigation = (
   state: NavigationState
 ): state is AutomationsNavigationState => state.navigator === 'automations'
+
+export const isCaptureNavigation = (
+  state: NavigationState
+): state is CaptureNavigationState => state.navigator === 'capture'
+
+export const isDaysNavigation = (
+  state: NavigationState
+): state is DaysNavigationState => state.navigator === 'days'
 
 export const DEFAULT_NAVIGATION_STATE: NavigationState = {
   navigator: 'sessions',
@@ -841,6 +879,12 @@ export const getNavigationStateKey = (state: NavigationState): string => {
       return `automations/automation/${state.details.automationId}`
     }
     return 'automations'
+  }
+  if (state.navigator === 'capture') {
+    return state.details ? `capture/item/${state.details.id}` : 'capture'
+  }
+  if (state.navigator === 'days') {
+    return state.dateISO ? `days/${state.dateISO}` : 'days'
   }
   if (state.navigator === 'settings') {
     return `settings:${state.subpage}`
@@ -887,6 +931,17 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
       return { navigator: 'automations', details: { type: 'automation', automationId } }
     }
     return { navigator: 'automations', details: null }
+  }
+
+  if (key === 'capture') return { navigator: 'capture', details: null }
+  if (key.startsWith('capture/item/')) {
+    const id = key.slice(13)
+    return id ? { navigator: 'capture', details: { type: 'item', id } } : { navigator: 'capture', details: null }
+  }
+  if (key === 'days') return { navigator: 'days' }
+  if (key.startsWith('days/')) {
+    const dateISO = key.slice(5)
+    return /^\d{4}-\d{2}-\d{2}$/.test(dateISO) ? { navigator: 'days', dateISO } : { navigator: 'days' }
   }
 
   // Handle settings

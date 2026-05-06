@@ -31,7 +31,14 @@ import {
   isSettingsNavigation,
   isSkillsNavigation,
   isAutomationsNavigation,
+  isCaptureNavigation,
+  isDaysNavigation,
 } from '@/contexts/NavigationContext'
+import { CaptureItemView } from '@craft-agent/ui/capture'
+import type { CaptureItem } from '@craft-agent/shared/capture'
+import { DaysMainPane } from '@craft-agent/ui/days'
+import { addDays, todayDateISO } from '@craft-agent/shared/days/date'
+import type { DayFileKind, DayRecord, DayTask } from '@craft-agent/shared/days'
 import { useSessionSelection, useIsMultiSelectActive, useSelectedIds, useSelectionCount } from '@/hooks/useSession'
 import { sourceSelection, skillSelection, automationSelection } from '@/hooks/useEntitySelection'
 import { extractLabelId } from '@craft-agent/shared/labels'
@@ -90,6 +97,9 @@ export function MainContentPanel({
   const { clearMultiSelect } = useSessionSelection()
   const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
   const automations = useAtomValue(automationsAtom)
+  const [captureItems, setCaptureItems] = useState<CaptureItem[]>([])
+  const [day, setDay] = useState<DayRecord | null>(null)
+  const [carryForwardTasks, setCarryForwardTasks] = useState<DayTask[]>([])
 
   // Execution history for the selected automation
   const selectedAutomationId = isAutomationsNavigation(navState) ? navState.details?.automationId : undefined
@@ -118,6 +128,41 @@ export function MainContentPanel({
 
     return () => { stale = true; cleanup() }
   }, [selectedAutomationId, getAutomationHistory])
+
+  useEffect(() => {
+    if (!activeWorkspaceId || !isCaptureNavigation(navState)) return
+    window.electronAPI.listCaptureInbox(activeWorkspaceId).then(setCaptureItems).catch(() => setCaptureItems([]))
+  }, [activeWorkspaceId, navState])
+
+  useEffect(() => {
+    if (!activeWorkspaceId || !isCaptureNavigation(navState)) return
+    return window.electronAPI.onCaptureSaved((payload) => {
+      if (payload.workspaceId !== activeWorkspaceId) return
+      setCaptureItems(prev => {
+        const withoutSaved = prev.filter(item => item.id !== payload.item.id)
+        return [payload.item, ...withoutSaved]
+      })
+    })
+  }, [activeWorkspaceId, navState])
+
+  useEffect(() => {
+    if (!activeWorkspaceId || !isDaysNavigation(navState)) return
+    const dateISO = navState.dateISO ?? todayDateISO()
+    window.electronAPI.ensureDay(activeWorkspaceId, dateISO).then(setDay).catch(() => setDay(null))
+    window.electronAPI.getIncompleteDayTasks(activeWorkspaceId, addDays(dateISO, -1)).then(setCarryForwardTasks).catch(() => setCarryForwardTasks([]))
+  }, [activeWorkspaceId, navState])
+
+  const handlePullForwardDayTasks = useCallback(async () => {
+    if (!activeWorkspaceId || !day) return
+    await window.electronAPI.pullForwardDayTasks(activeWorkspaceId, addDays(day.dateISO, -1), day.dateISO)
+    setDay(await window.electronAPI.ensureDay(activeWorkspaceId, day.dateISO))
+    setCarryForwardTasks([])
+  }, [activeWorkspaceId, day])
+
+  const handleUpdateDayFile = useCallback(async (kind: DayFileKind, content: string) => {
+    if (!activeWorkspaceId || !day) return
+    setDay(await window.electronAPI.updateDayFile(activeWorkspaceId, day.dateISO, kind, content))
+  }, [activeWorkspaceId, day])
 
   // Source multi-select state
   const isSourceMultiSelectActive = sourceSelection.useIsMultiSelectActive()
@@ -347,6 +392,28 @@ export function MainContentPanel({
         <div className="flex items-center justify-center h-full text-muted-foreground">
           <p className="text-sm">{t("automations.noAutomationsConfigured")}</p>
         </div>
+      </Panel>
+    )
+  }
+
+  if (isCaptureNavigation(navState)) {
+    const selected = navState.details ? captureItems.find(item => item.id === navState.details!.id) : null
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <CaptureItemView item={selected} />
+      </Panel>
+    )
+  }
+
+  if (isDaysNavigation(navState)) {
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <DaysMainPane
+          day={day}
+          carryForwardTasks={carryForwardTasks}
+          onPullForward={handlePullForwardDayTasks}
+          onUpdateFile={handleUpdateDayFile}
+        />
       </Panel>
     )
   }

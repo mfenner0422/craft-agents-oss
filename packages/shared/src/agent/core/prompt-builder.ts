@@ -13,10 +13,13 @@
  */
 
 import { isLocalMcpEnabled } from '../../workspaces/storage.ts';
+import { loadWorkspaceConfig } from '../../workspaces/index.ts';
 import { formatPreferencesForPrompt } from '../../config/preferences.ts';
 import { formatSessionState } from '../mode-manager.ts';
 import { getDateTimeContext, getWorkingDirectoryContext } from '../../prompts/system.ts';
 import { getSessionPlansPath, getSessionDataPath, getSessionPath } from '../../sessions/storage.ts';
+import { ensureDay } from '../../days/index.ts';
+import { resolveVaultRoot } from '../../vault/index.ts';
 import type {
   PromptBuilderConfig,
   ContextBlockOptions,
@@ -45,6 +48,7 @@ export class PromptBuilder {
   private config: PromptBuilderConfig;
   private workspaceRootPath: string;
   private pinnedPreferencesPrompt: string | null = null;
+  private pinnedDailyContext: { dateISO: string; text: string } | null = null;
 
   constructor(config: PromptBuilderConfig) {
     this.config = config;
@@ -91,6 +95,11 @@ export class PromptBuilder {
 
     // Add workspace capabilities
     parts.push(this.formatWorkspaceCapabilities());
+
+    const dailyContext = this.formatDailyContext();
+    if (dailyContext) {
+      parts.push(dailyContext);
+    }
 
     // Add working directory context
     const workingDirContext = this.getWorkingDirectoryContext();
@@ -201,6 +210,47 @@ Please continue the conversation naturally from where we left off.
     this.pinnedPreferencesPrompt = null;
   }
 
+  formatDailyContext(forceRefresh = false): string | null {
+    const workspace = this.config.workspace;
+    if (!workspace?.rootPath) return null;
+    const config = loadWorkspaceConfig(workspace.rootPath);
+    if (config?.days?.enabled !== true) return null;
+
+    const dateISO = new Date().toISOString().slice(0, 10);
+    if (this.pinnedDailyContext?.dateISO === dateISO && !forceRefresh) {
+      return this.pinnedDailyContext.text;
+    }
+
+    try {
+      const day = ensureDay(resolveVaultRoot(workspace.rootPath, config), dateISO);
+      const text = [
+        '<daily_context>',
+        `date: ${dateISO}`,
+        '',
+        '<tasks>',
+        truncateDailyFile(day.files.tasks),
+        '</tasks>',
+        '',
+        '<scratch>',
+        truncateDailyFile(day.files.scratch),
+        '</scratch>',
+        '',
+        '<journal>',
+        truncateDailyFile(day.files.journal),
+        '</journal>',
+        '</daily_context>',
+      ].join('\n');
+      this.pinnedDailyContext = { dateISO, text };
+      return text;
+    } catch {
+      return null;
+    }
+  }
+
+  clearPinnedDailyContext(): void {
+    this.pinnedDailyContext = null;
+  }
+
   // ============================================================
   // Configuration Accessors
   // ============================================================
@@ -211,6 +261,7 @@ Please continue the conversation naturally from where we left off.
   setWorkspace(workspace: PromptBuilderConfig['workspace']): void {
     this.config.workspace = workspace;
     this.workspaceRootPath = workspace?.rootPath ?? '';
+    this.clearPinnedDailyContext();
   }
 
   /**
@@ -240,4 +291,9 @@ Please continue the conversation naturally from where we left off.
   getSystemPromptPreset(): string {
     return this.config.systemPromptPreset ?? 'default';
   }
+}
+
+function truncateDailyFile(content: string, maxChars = 4000): string {
+  if (content.length <= maxChars) return content.trim();
+  return `${content.slice(0, maxChars).trim()}\n...[truncated]`;
 }

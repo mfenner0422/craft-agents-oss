@@ -56,6 +56,9 @@ export interface SessionStatusChangePayload extends BaseEventPayload {
 export interface SchedulerTickPayload extends BaseEventPayload {
   localTime: string;
   utcTime: string;
+  scheduledAt: string;
+  recoveredAt?: string;
+  recoveredMatcherId?: string;
 }
 
 /** Label config change payload */
@@ -124,7 +127,7 @@ interface RateWindow {
 }
 
 const DEFAULT_RATE_LIMIT = 10;
-const SCHEDULER_RATE_LIMIT = 60;
+const SCHEDULER_RATE_LIMIT = 7 * 24 * 60;
 const RATE_WINDOW_MS = 60_000; // 1 minute
 
 function getRateLimit(event: AutomationEvent): number {

@@ -37,6 +37,7 @@ import {
   SettingsRow,
   SettingsToggle,
   SettingsMenuSelectRow,
+  SettingsInput,
 } from '@/components/settings'
 
 export const meta: DetailsPageMeta = {
@@ -65,6 +66,11 @@ export default function WorkspaceSettingsPage() {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('ask')
   const [workingDirectory, setWorkingDirectory] = useState('')
   const [localMcpEnabled, setLocalMcpEnabled] = useState(true)
+  const [vaultPath, setVaultPath] = useState('')
+  const [daysEnabled, setDaysEnabled] = useState(false)
+  const [daysMorningTime, setDaysMorningTime] = useState('08:00')
+  const [daysEveningTime, setDaysEveningTime] = useState('19:00')
+  const [captureEnabled, setCaptureEnabled] = useState(false)
   const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(true)
 
   // Default sources state
@@ -74,6 +80,22 @@ export default function WorkspaceSettingsPage() {
   // Mode cycling state
   const [enabledModes, setEnabledModes] = useState<PermissionMode[]>(['safe', 'ask', 'allow-all'])
   const [modeCyclingError, setModeCyclingError] = useState<string | null>(null)
+
+  const applyWorkspaceSettings = useCallback((settings: WorkspaceSettings) => {
+    setWsName(settings.name || '')
+    setWsNameEditing(settings.name || '')
+    setPermissionMode(settings.permissionMode || 'ask')
+    setWorkingDirectory(settings.workingDirectory || '')
+    setLocalMcpEnabled(settings.localMcpEnabled ?? true)
+    setVaultPath(settings.vaultPath || '')
+    setDaysEnabled(settings.daysEnabled ?? false)
+    setDaysMorningTime(settings.daysMorningTime || '08:00')
+    setDaysEveningTime(settings.daysEveningTime || '19:00')
+    setCaptureEnabled(settings.captureEnabled ?? false)
+    if (settings.cyclablePermissionModes && settings.cyclablePermissionModes.length >= 2) {
+      setEnabledModes(settings.cyclablePermissionModes)
+    }
+  }, [])
 
   // Load workspace settings when active workspace changes
   useEffect(() => {
@@ -87,15 +109,7 @@ export default function WorkspaceSettingsPage() {
       try {
         const settings = await window.electronAPI.getWorkspaceSettings(activeWorkspaceId)
         if (settings) {
-          setWsName(settings.name || '')
-          setWsNameEditing(settings.name || '')
-          setPermissionMode(settings.permissionMode || 'ask')
-          setWorkingDirectory(settings.workingDirectory || '')
-          setLocalMcpEnabled(settings.localMcpEnabled ?? true)
-          // Load cyclable permission modes from workspace settings
-          if (settings.cyclablePermissionModes && settings.cyclablePermissionModes.length >= 2) {
-            setEnabledModes(settings.cyclablePermissionModes)
-          }
+          applyWorkspaceSettings(settings)
 
           // Load default source slugs
           const savedSlugs = settings.enabledSourceSlugs ?? []
@@ -146,7 +160,25 @@ export default function WorkspaceSettingsPage() {
     }
 
     loadWorkspaceSettings()
-  }, [activeWorkspaceId])
+  }, [activeWorkspaceId, applyWorkspaceSettings])
+
+  useEffect(() => {
+    if (!window.electronAPI || !activeWorkspaceId) return
+    const cleanupChanged = window.electronAPI.onWorkspaceSettingsChanged?.((payload) => {
+      if (payload.workspaceId !== activeWorkspaceId || !payload.settings) return
+      applyWorkspaceSettings(payload.settings)
+    })
+    const cleanupInvalid = window.electronAPI.onWorkspaceSettingsInvalid?.((payload) => {
+      if (payload.workspaceId !== activeWorkspaceId) return
+      toast.error(t('settings.workspace.invalidConfig'), {
+        description: payload.issues.map(issue => `${issue.field}: ${issue.message}`).join('\n'),
+      })
+    })
+    return () => {
+      cleanupChanged?.()
+      cleanupInvalid?.()
+    }
+  }, [activeWorkspaceId, applyWorkspaceSettings, t])
 
   // Subscribe to live source changes (additions/removals)
   useEffect(() => {
@@ -281,6 +313,37 @@ export default function WorkspaceSettingsPage() {
     },
     [updateWorkspaceSetting]
   )
+
+  const handleVaultPathSelected = useCallback(async () => {
+    const selectedPath = await window.electronAPI.openFolderDialog()
+    if (!selectedPath) return
+    const saved = await updateWorkspaceSetting('vaultPath', selectedPath)
+    if (saved) setVaultPath(selectedPath)
+  }, [updateWorkspaceSetting])
+
+  const handleDaysEnabledChange = useCallback(async (enabled: boolean) => {
+    setDaysEnabled(enabled)
+    await updateWorkspaceSetting('daysEnabled', enabled)
+  }, [updateWorkspaceSetting])
+
+  const handleDaysMorningTimeChange = useCallback(async (value: string) => {
+    setDaysMorningTime(value)
+    if (/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) {
+      await updateWorkspaceSetting('daysMorningTime', value)
+    }
+  }, [updateWorkspaceSetting])
+
+  const handleDaysEveningTimeChange = useCallback(async (value: string) => {
+    setDaysEveningTime(value)
+    if (/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) {
+      await updateWorkspaceSetting('daysEveningTime', value)
+    }
+  }, [updateWorkspaceSetting])
+
+  const handleCaptureEnabledChange = useCallback(async (enabled: boolean) => {
+    setCaptureEnabled(enabled)
+    await updateWorkspaceSetting('captureEnabled', enabled)
+  }, [updateWorkspaceSetting])
 
   const handleSourceToggle = useCallback(
     async (slug: string, checked: boolean) => {
@@ -515,6 +578,47 @@ export default function WorkspaceSettingsPage() {
             {/* Advanced */}
             <SettingsSection title={t("settings.workspace.advanced")}>
               <SettingsCard>
+                <SettingsRow
+                  label={t("settings.workspace.vaultPath")}
+                  description={vaultPath || t("settings.workspace.vaultPathDesc")}
+                  action={
+                    <button
+                      type="button"
+                      onClick={handleVaultPathSelected}
+                      className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors"
+                    >
+                      {t("common.change")}
+                    </button>
+                  }
+                />
+                <SettingsToggle
+                  label={t("settings.workspace.daysEnabled")}
+                  description={t("settings.workspace.daysEnabledDesc")}
+                  checked={daysEnabled}
+                  onCheckedChange={handleDaysEnabledChange}
+                />
+                {daysEnabled && (
+                  <>
+                    <SettingsInput
+                      label={t("settings.workspace.daysMorningTime")}
+                      value={daysMorningTime}
+                      onChange={handleDaysMorningTimeChange}
+                      placeholder="08:00"
+                    />
+                    <SettingsInput
+                      label={t("settings.workspace.daysEveningTime")}
+                      value={daysEveningTime}
+                      onChange={handleDaysEveningTimeChange}
+                      placeholder="19:00"
+                    />
+                  </>
+                )}
+                <SettingsToggle
+                  label={t("settings.workspace.captureEnabled")}
+                  description={t("settings.workspace.captureEnabledDesc")}
+                  checked={captureEnabled}
+                  onCheckedChange={handleCaptureEnabledChange}
+                />
                 <SettingsRow
                   label={t("settings.workspace.defaultWorkingDir")}
                   description={workingDirectory || t("settings.workspace.defaultWorkingDirDesc")}

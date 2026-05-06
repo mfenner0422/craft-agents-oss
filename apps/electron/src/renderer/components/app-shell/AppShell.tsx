@@ -32,6 +32,16 @@ import {
   Bot,
   Info,
 } from "lucide-react"
+import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core"
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
 import { SourceAvatar } from "@/components/ui/source-avatar"
 import { TopBar } from "./TopBar"
@@ -43,6 +53,10 @@ import { Button } from "@/components/ui/button"
 import { HeaderIconButton } from "@/components/ui/HeaderIconButton"
 import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipTrigger, TooltipContent, DocumentFormattedMarkdownOverlay } from "@craft-agent/ui"
+import { CaptureInboxList } from "@craft-agent/ui/capture"
+import { DaysListColumn } from "@craft-agent/ui/days"
+import type { CaptureItem } from "@craft-agent/shared/capture"
+import { todayDateISO } from "@craft-agent/shared/days/date"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -111,6 +125,8 @@ import {
   isSettingsNavigation,
   isSkillsNavigation,
   isAutomationsNavigation,
+  isCaptureNavigation,
+  isDaysNavigation,
   type NavigationState,
 } from "@/contexts/NavigationContext"
 import type { SettingsSubpage } from "../../../shared/types"
@@ -837,6 +853,53 @@ function AppShellContent({
     handleTestAutomation, handleToggleAutomation, handleDuplicateAutomation, handleDeleteAutomation, confirmDeleteAutomation,
     getAutomationHistory, handleReplayAutomation,
   } = useAutomations(activeWorkspaceId)
+  const [captureItems, setCaptureItems] = React.useState<CaptureItem[]>([])
+  const [days, setDays] = React.useState<string[]>([])
+  const [draggedSessionTitle, setDraggedSessionTitle] = React.useState<string | null>(null)
+  const sessionDndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor),
+  )
+
+  const addDayToNavigator = React.useCallback((dateISO: string) => {
+    setDays(prev => prev.includes(dateISO)
+      ? prev
+      : [...prev, dateISO].sort((a, b) => b.localeCompare(a)))
+  }, [])
+
+  React.useEffect(() => {
+    if (!activeWorkspaceId) {
+      setCaptureItems([])
+      return
+    }
+    window.electronAPI.listCaptureInbox(activeWorkspaceId).then(setCaptureItems).catch(() => setCaptureItems([]))
+  }, [activeWorkspaceId])
+
+  React.useEffect(() => {
+    if (!activeWorkspaceId) return
+    return window.electronAPI.onCaptureSaved((payload) => {
+      if (payload.workspaceId !== activeWorkspaceId) return
+      setCaptureItems(prev => {
+        const withoutSaved = prev.filter(item => item.id !== payload.item.id)
+        return [payload.item, ...withoutSaved]
+      })
+    })
+  }, [activeWorkspaceId])
+
+  React.useEffect(() => {
+    if (!activeWorkspaceId) {
+      setDays([])
+      return
+    }
+    window.electronAPI.listDays(activeWorkspaceId).then(setDays).catch(() => setDays([]))
+  }, [activeWorkspaceId])
+
+  React.useEffect(() => {
+    if (isDaysNavigation(navState) && navState.dateISO) {
+      addDayToNavigator(navState.dateISO)
+    }
+  }, [addDayToNavigator, navState])
+
 
   // Whether local MCP servers are enabled (affects stdio source status)
   const [localMcpEnabled, setLocalMcpEnabled] = React.useState(true)
@@ -1713,6 +1776,31 @@ function AppShellContent({
     navigate(routes.view.automationsAgentic())
   }, [])
 
+  const handleCaptureClick = useCallback(() => {
+    navigate(routes.view.capture())
+  }, [])
+
+  const handleCaptureItemClick = useCallback((itemId: string) => {
+    navigate(routes.view.capture(itemId))
+  }, [])
+
+  const handleDaysClick = useCallback(() => {
+    const today = todayDateISO()
+    if (activeWorkspaceId) {
+      window.electronAPI.ensureDay(activeWorkspaceId, today).then(() => {
+        addDayToNavigator(today)
+        navigate(routes.view.days(today))
+      })
+    } else {
+      navigate(routes.view.days())
+    }
+  }, [activeWorkspaceId, addDayToNavigator, navigate])
+
+  const handleDaySelect = useCallback((dateISO: string) => {
+    addDayToNavigator(dateISO)
+    navigate(routes.view.days(dateISO))
+  }, [addDayToNavigator, navigate])
+
   // Handler for settings view
   const handleSettingsClick = useCallback((subpage: SettingsSubpage = 'app') => {
     navigate(routes.view.settings(subpage))
@@ -1934,6 +2022,7 @@ function AppShellContent({
 
     // 1. Sessions section: All Sessions (expandable) with status items, Flagged, Archived as children
     result.push({ id: 'nav:allSessions', type: 'nav', action: handleAllSessionsClick })
+    result.push({ id: 'nav:days', type: 'nav', action: handleDaysClick })
     for (const state of effectiveSessionStatuses) {
       result.push({ id: `nav:state:${state.id}`, type: 'nav', action: () => handleSessionStatusClick(state.id) })
     }
@@ -1955,13 +2044,14 @@ function AppShellContent({
 
     // 3. Sources, Skills, Settings
     result.push({ id: 'nav:sources', type: 'nav', action: handleSourcesClick })
+    result.push({ id: 'nav:capture', type: 'nav', action: handleCaptureClick })
     result.push({ id: 'nav:skills', type: 'nav', action: handleSkillsClick })
     result.push({ id: 'nav:automations', type: 'nav', action: handleAutomationsClick })
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
     result.push({ id: 'nav:whats-new', type: 'nav', action: handleWhatsNewClick })
 
     return result
-  }, [handleAllSessionsClick, handleFlaggedClick, handleArchivedClick, handleSessionStatusClick, effectiveSessionStatuses, handleLabelClick, labelConfigs, labelTree, viewConfigs, handleViewClick, handleSourcesClick, handleSkillsClick, handleAutomationsClick, handleSettingsClick, handleWhatsNewClick])
+  }, [handleAllSessionsClick, handleDaysClick, handleFlaggedClick, handleArchivedClick, handleSessionStatusClick, effectiveSessionStatuses, handleLabelClick, labelConfigs, labelTree, viewConfigs, handleViewClick, handleSourcesClick, handleCaptureClick, handleSkillsClick, handleAutomationsClick, handleSettingsClick, handleWhatsNewClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -2091,6 +2181,9 @@ function AppShellContent({
       }
     }
 
+    if (isCaptureNavigation(navState)) return t("sidebar.capture")
+    if (isDaysNavigation(navState)) return t("sidebar.days")
+
     // Settings navigator
     if (isSettingsNavigation(navState)) return t("sidebar.settings")
 
@@ -2169,8 +2262,31 @@ function AppShellContent({
     })
   }, [sessionFilter, labelCounts, activeWorkspace?.id, handleLabelClick, isExpanded, toggleExpanded, openConfigureLabels, handleAddLabel, handleDeleteLabel])
 
+  const handleSessionDragStart = useCallback((event: DragStartEvent) => {
+    const data = event.active.data.current
+    setDraggedSessionTitle(data?.type === 'session' && typeof data.title === 'string' ? data.title : null)
+  }, [])
+
+  const handleSessionDragEnd = useCallback((event: DragEndEvent) => {
+    const activeData = event.active.data.current
+    const overData = event.over?.data.current
+    setDraggedSessionTitle(null)
+    if (activeData?.type !== 'session' || overData?.type !== 'session-target') return
+    const sessionId = typeof activeData.sessionId === 'string' ? activeData.sessionId : null
+    const onSessionDrop = overData.onSessionDrop
+    if (!sessionId || typeof onSessionDrop !== 'function') return
+    if (!sessionMetaMap.has(sessionId)) return
+    onSessionDrop(sessionId)
+  }, [sessionMetaMap])
+
   return (
     <AppShellProvider value={appShellContextValue}>
+      <DndContext
+        sensors={sessionDndSensors}
+        onDragStart={handleSessionDragStart}
+        onDragCancel={() => setDraggedSessionTitle(null)}
+        onDragEnd={handleSessionDragEnd}
+      >
         {/* === TOP BAR === */}
         <TopBar
           workspaces={workspaces}
@@ -2249,11 +2365,20 @@ function AppShellContent({
                 <div className="flex-1 overflow-y-auto min-h-0 mask-fade-bottom pb-4">
                 <LeftSidebar
                   isCollapsed={false}
+                  sessionDragActive={!!draggedSessionTitle}
                   getItemProps={getSidebarItemProps}
                   focusedItemId={focusedSidebarItemId}
                   links={[
                     // --- Sessions Section ---
                     // All Sessions: expandable with status children (sortable) + Flagged & Archived as trailing items
+                    {
+                      id: "nav:days",
+                      title: t("sidebar.days"),
+                      label: days.length > 0 ? String(days.length) : undefined,
+                      icon: Calendar,
+                      variant: isDaysNavigation(navState) ? "default" : "ghost",
+                      onClick: handleDaysClick,
+                    },
                     {
                       id: "nav:allSessions",
                       title: t("sidebar.allSessions"),
@@ -2295,6 +2420,7 @@ function AppShellContent({
                           iconColorable: state.iconColorable,
                           variant: (sessionFilter?.kind === 'state' && sessionFilter.stateId === state.id ? "default" : "ghost") as "default" | "ghost",
                           onClick: () => handleSessionStatusClick(state.id),
+                          onSessionDrop: (sessionId: string) => onSessionStatusChange(sessionId, state.id),
                           contextMenu: {
                             type: 'status' as const,
                             statusId: state.id,
@@ -2311,6 +2437,7 @@ function AppShellContent({
                           icon: <Flag className="h-3.5 w-3.5" />,
                           variant: (sessionFilter?.kind === 'flagged' ? "default" : "ghost") as "default" | "ghost",
                           onClick: handleFlaggedClick,
+                          onSessionDrop: (sessionId: string) => onFlagSession(sessionId),
                         },
                         // Archived (trailing, non-sortable)
                         {
@@ -2320,8 +2447,17 @@ function AppShellContent({
                           icon: Archive,
                           variant: (sessionFilter?.kind === 'archived' ? "default" : "ghost") as "default" | "ghost",
                           onClick: handleArchivedClick,
+                          onSessionDrop: (sessionId: string) => onArchiveSession(sessionId),
                         },
                       ],
+                    },
+                    {
+                      id: "nav:capture",
+                      title: t("sidebar.capture"),
+                      label: captureItems.length > 0 ? String(captureItems.length) : undefined,
+                      icon: Inbox,
+                      variant: isCaptureNavigation(navState) ? "default" : "ghost",
+                      onClick: handleCaptureClick,
                     },
                     // Labels: navigable header (shows all labeled sessions) + hierarchical tree (drag-and-drop reorder + re-parent)
                     {
@@ -3117,6 +3253,21 @@ function AppShellContent({
                       {...getEditConfig('automation-config', activeWorkspace.rootPath)}
                     />
                   )}
+                  {/* New Capture button (only for capture mode) */}
+                  {isCaptureNavigation(navState) && activeWorkspaceId && (
+                    <HeaderIconButton
+                      icon={<Plus className="h-4 w-4" />}
+                      tooltip={t("sidebar.capture")}
+                      onClick={() => window.electronAPI.openCaptureWindow(activeWorkspaceId)}
+                    />
+                  )}
+                  {isDaysNavigation(navState) && (
+                    <HeaderIconButton
+                      icon={<Calendar className="h-4 w-4" />}
+                      tooltip={t("common.today")}
+                      onClick={handleDaysClick}
+                    />
+                  )}
                 </>
               }
             />
@@ -3156,6 +3307,20 @@ function AppShellContent({
                 onDeleteAutomation={handleDeleteAutomation}
                 selectedAutomationId={isAutomationsNavigation(navState) && navState.details ? navState.details.automationId : null}
                 workspaceRootPath={activeWorkspace?.rootPath}
+              />
+            )}
+            {isCaptureNavigation(navState) && (
+              <CaptureInboxList
+                items={captureItems}
+                selectedItemId={navState.details?.type === 'item' ? navState.details.id : null}
+                onSelectItem={handleCaptureItemClick}
+              />
+            )}
+            {isDaysNavigation(navState) && (
+              <DaysListColumn
+                days={days}
+                selectedDate={navState.dateISO ?? null}
+                onSelectDay={handleDaySelect}
               />
             )}
             {isSettingsNavigation(navState) && (
@@ -3522,6 +3687,14 @@ function AppShellContent({
           Mounted here so they survive context-menu / dropdown close. */}
       <MessagingDialogHost />
 
+      <DragOverlay>
+        {draggedSessionTitle ? (
+          <div className="max-w-[280px] truncate rounded-md border border-border bg-background px-3 py-2 text-[13px] shadow-modal-small">
+            {draggedSessionTitle}
+          </div>
+        ) : null}
+      </DragOverlay>
+      </DndContext>
     </AppShellProvider>
   )
 }

@@ -10,6 +10,9 @@ export type {
   CreateWorkspaceInput,
   LoadedWorkspace,
   WorkspaceSummary,
+  VaultConfig,
+  DaysConfig,
+  CaptureConfig,
 } from './types.ts';
 
 // Storage functions

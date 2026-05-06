@@ -508,6 +508,11 @@ export interface WorkspaceSettings {
   localMcpEnabled?: boolean
   defaultLlmConnection?: string
   enabledSourceSlugs?: string[]
+  vaultPath?: string
+  daysEnabled?: boolean
+  daysMorningTime?: string
+  daysEveningTime?: string
+  captureEnabled?: boolean
 }
 
 // ---------------------------------------------------------------------------

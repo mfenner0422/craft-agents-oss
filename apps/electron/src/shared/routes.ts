@@ -182,6 +182,12 @@ export const routes = {
       subpage
         ? `settings/${subpage}` as const
         : 'settings' as const,
+
+    capture: (itemId?: string) =>
+      itemId ? `capture/item/${itemId}` as const : 'capture' as const,
+
+    days: (dateISO?: string) =>
+      dateISO ? `days/${dateISO}` as const : 'days' as const,
   },
 } as const
 

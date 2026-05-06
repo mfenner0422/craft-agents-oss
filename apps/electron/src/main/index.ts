@@ -188,6 +188,7 @@ const DEEPLINK_SCHEME = process.env.CRAFT_DEEPLINK_SCHEME || 'craftagents'
 
 let windowManager: WindowManager | null = null
 let sessionManager: SessionManager | null = null
+let captureManager: import('./capture-manager').CaptureManager | null = null
 let browserPaneManager: BrowserPaneManager | null = null
 let oauthFlowStore: OAuthFlowStore | null = null
 let moduleSink: EventSink | null = null
@@ -706,6 +707,25 @@ app.whenReady().then(async () => {
 
       // Capture module-level references for before-quit cleanup and deep-link handlers
       sessionManager = instance.sessionManager
+      const [{ CaptureManager }, { openCaptureWindow }, { DEFAULT_CAPTURE_HOTKEY, loadPreferences }, { setCaptureHotkeyBinder }] = await Promise.all([
+        import('./capture-manager'),
+        import('./capture-window'),
+        import('@craft-agent/shared/config/preferences'),
+        import('./handlers/settings'),
+      ])
+      captureManager = new CaptureManager({
+        initialHotkey: loadPreferences().captureHotkey ?? DEFAULT_CAPTURE_HOTKEY,
+        getWorkspaces: () => sessionManager?.getWorkspaces() ?? [],
+        getWorkspaceForWindow: (webContentsId) => windowManager?.getWorkspaceForWindow(webContentsId) ?? null,
+        openCaptureWindow,
+      })
+      captureManager.start()
+      setCaptureHotkeyBinder((accelerator) => captureManager?.setHotkey(accelerator) ?? { ok: false, error: 'unavailable' })
+      sessionManager.setOnWorkspaceConfigChange(() => captureManager?.refreshTargetWorkspaces())
+
+      instance.wsServer.handle(RPC_CHANNELS.capture.OPEN, async (_ctx, workspaceId: string) => {
+        openCaptureWindow(workspaceId)
+      })
       oauthFlowStore = instance.oauthFlowStore
       moduleSink = instance.wsServer.push.bind(instance.wsServer)
       moduleClientResolver = resolveClientId
@@ -1018,7 +1038,7 @@ app.whenReady().then(async () => {
     // Non-critical — powerSaveBlocker may not work on headless/xvfb setups
     try {
       const { initPowerManager } = await import('./power-manager')
-      await initPowerManager()
+      await initPowerManager(() => { sessionManager?.notifyAutomationResume() })
     } catch (err) {
       mainLog.warn('[power] Power manager init failed (non-critical):', err instanceof Error ? err.message : err)
     }
@@ -1162,6 +1182,8 @@ app.on('before-quit', async (event) => {
     // Clean up power manager (release power blocker)
     const { cleanup: cleanupPowerManager } = await import('./power-manager')
     cleanupPowerManager()
+    captureManager?.dispose()
+    captureManager = null
 
     // Release the server lock file so the next launch doesn't see a stale PID.
     // This must happen regardless of the exit path (normal quit or update quit).

@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
-import { dirname } from 'path'
+import { dirname, isAbsolute, resolve } from 'path'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, getDefaultThinkingLevel, setDefaultThinkingLevel } from '@craft-agent/shared/config'
 import { isValidThinkingLevel, normalizeThinkingLevel, THINKING_LEVEL_IDS } from '@craft-agent/shared/agent/thinking-levels'
@@ -114,6 +114,11 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       localMcpEnabled: config?.localMcpServers?.enabled ?? true,
       defaultLlmConnection: config?.defaults?.defaultLlmConnection,
       enabledSourceSlugs: config?.defaults?.enabledSourceSlugs ?? [],
+      vaultPath: config?.vault?.path,
+      daysEnabled: config?.days?.enabled ?? false,
+      daysMorningTime: config?.days?.morningTime ?? '08:00',
+      daysEveningTime: config?.days?.eveningTime ?? '19:00',
+      captureEnabled: config?.capture?.enabled ?? false,
     }
   })
 
@@ -125,7 +130,7 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       : value
 
     // Validate key is a known workspace setting
-    const validKeys = ['name', 'model', 'enabledSourceSlugs', 'permissionMode', 'cyclablePermissionModes', 'thinkingLevel', 'workingDirectory', 'localMcpEnabled', 'defaultLlmConnection']
+    const validKeys = ['name', 'model', 'enabledSourceSlugs', 'permissionMode', 'cyclablePermissionModes', 'thinkingLevel', 'workingDirectory', 'localMcpEnabled', 'defaultLlmConnection', 'vaultPath', 'daysEnabled', 'daysMorningTime', 'daysEveningTime', 'captureEnabled']
     if (!validKeys.includes(key)) {
       throw new Error(`Invalid workspace setting key: ${key}. Valid keys: ${validKeys.join(', ')}`)
     }
@@ -145,6 +150,19 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       }
     }
 
+    if (key === 'vaultPath' && normalizedValue !== undefined && normalizedValue !== null && String(normalizedValue).trim()) {
+      const vaultPath = String(normalizedValue).trim()
+      const resolvedVaultPath = isAbsolute(vaultPath) ? vaultPath : resolve(workspace.rootPath, vaultPath)
+      mkdirSync(resolvedVaultPath, { recursive: true })
+    }
+
+    if ((key === 'daysMorningTime' || key === 'daysEveningTime') && normalizedValue !== undefined && normalizedValue !== null) {
+      const valueString = String(normalizedValue)
+      if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(valueString)) {
+        throw new Error('Time must use HH:MM format')
+      }
+    }
+
     const { loadWorkspaceConfig, saveWorkspaceConfig } = await import('@craft-agent/shared/workspaces')
     const config = loadWorkspaceConfig(workspace.rootPath)
     if (!config) {
@@ -158,6 +176,26 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       // Store in localMcpServers.enabled (top-level, not in defaults)
       config.localMcpServers = config.localMcpServers || { enabled: true }
       config.localMcpServers.enabled = Boolean(normalizedValue)
+    } else if (key === 'vaultPath') {
+      const vaultPath = normalizedValue == null ? '' : String(normalizedValue).trim()
+      config.vault = config.vault || {}
+      if (vaultPath) {
+        config.vault.path = vaultPath
+      } else {
+        delete config.vault.path
+      }
+    } else if (key === 'daysEnabled') {
+      config.days = config.days || { enabled: false }
+      config.days.enabled = Boolean(normalizedValue)
+    } else if (key === 'daysMorningTime') {
+      config.days = config.days || { enabled: false }
+      config.days.morningTime = String(normalizedValue)
+    } else if (key === 'daysEveningTime') {
+      config.days = config.days || { enabled: false }
+      config.days.eveningTime = String(normalizedValue)
+    } else if (key === 'captureEnabled') {
+      config.capture = config.capture || { enabled: false }
+      config.capture.enabled = Boolean(normalizedValue)
     } else {
       // Update the setting in defaults
       config.defaults = config.defaults || {}
