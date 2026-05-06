@@ -1,5 +1,5 @@
 import { getWorkspaceOrThrow } from '@craft-agent/server-core/handlers';
-import { ensureDay, listDays } from '@craft-agent/shared/days';
+import { assertDateISO, ensureDay, listDays } from '@craft-agent/shared/days';
 import { resolveVaultRoot } from '@craft-agent/shared/vault';
 import { loadWorkspaceConfig } from '@craft-agent/shared/workspaces';
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol';
@@ -8,6 +8,7 @@ import type { HandlerDeps } from '../handler-deps';
 
 export function registerDaysHandlers(server: RpcServer, _deps: HandlerDeps): void {
   server.handle(RPC_CHANNELS.days.ENSURE, async (_ctx, workspaceId: string, dateISO?: string) => {
+    if (dateISO) assertDateISO(dateISO);
     const workspace = getWorkspaceOrThrow(workspaceId);
     const config = loadWorkspaceConfig(workspace.rootPath);
     return ensureDay(resolveVaultRoot(workspace.rootPath, config), dateISO);

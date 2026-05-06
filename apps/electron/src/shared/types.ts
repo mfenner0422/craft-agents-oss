@@ -936,7 +936,7 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
   if (key === 'days') return { navigator: 'days' }
   if (key.startsWith('days/')) {
     const dateISO = key.slice(5)
-    return dateISO ? { navigator: 'days', dateISO } : { navigator: 'days' }
+    return /^\d{4}-\d{2}-\d{2}$/.test(dateISO) ? { navigator: 'days', dateISO } : { navigator: 'days' }
   }
 
   // Handle settings

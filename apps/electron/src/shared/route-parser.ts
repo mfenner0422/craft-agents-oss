@@ -63,6 +63,7 @@ export interface ParsedCompoundRoute {
 const COMPOUND_ROUTE_PREFIXES = [
   'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'automations', 'settings', 'capture', 'days'
 ]
+const DAY_ISO_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
 /**
  * Check if a route is a compound route (new format)
@@ -112,7 +113,8 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
   }
 
   if (first === 'days') {
-    return { navigator: 'days', details: segments[1] ? { type: 'day', id: segments[1] } : null }
+    const dateISO = segments[1]
+    return { navigator: 'days', details: dateISO && DAY_ISO_PATTERN.test(dateISO) ? { type: 'day', id: dateISO } : null }
   }
 
   // Sources navigator - supports type filters (api, mcp, local)
@@ -657,7 +659,7 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
     case 'capture-item':
       return parsed.id ? { navigator: 'capture', details: { type: 'item', id: parsed.id } } : { navigator: 'capture', details: null }
     case 'days':
-      return { navigator: 'days', dateISO: parsed.id }
+      return { navigator: 'days', dateISO: parsed.id && DAY_ISO_PATTERN.test(parsed.id) ? parsed.id : undefined }
     case 'automation-info':
       if (parsed.id) {
         return {
