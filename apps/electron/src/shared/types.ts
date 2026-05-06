@@ -437,6 +437,11 @@ export interface ElectronAPI {
   enrichCaptureUrl(url: string): Promise<{ title?: string; description?: string }>
   openCaptureWindow(workspaceId: string): Promise<void>
   onCaptureSaved(callback: (payload: { workspaceId: string; item: import('@craft-agent/shared/capture').CaptureItem }) => void): () => void
+  ensureDay(workspaceId: string, dateISO?: string): Promise<import('@craft-agent/shared/days').DayRecord>
+  listDays(workspaceId: string, limit?: number): Promise<string[]>
+  getIncompleteDayTasks(workspaceId: string, dateISO: string): Promise<import('@craft-agent/shared/days').DayTask[]>
+  pullForwardDayTasks(workspaceId: string, fromDateISO: string, toDateISO: string): Promise<import('@craft-agent/shared/days').DayTask[]>
+  updateDayFile(workspaceId: string, dateISO: string, kind: import('@craft-agent/shared/days').DayFileKind, content: string): Promise<import('@craft-agent/shared/days').DayRecord>
 
   // Folder dialog
   openFolderDialog(): Promise<string | null>
@@ -804,6 +809,12 @@ export interface CaptureNavigationState {
   rightSidebar?: RightSidebarPanel
 }
 
+export interface DaysNavigationState {
+  navigator: 'days'
+  dateISO?: string
+  rightSidebar?: RightSidebarPanel
+}
+
 /**
  * Unified navigation state
  */
@@ -814,6 +825,7 @@ export type NavigationState =
   | SkillsNavigationState
   | AutomationsNavigationState
   | CaptureNavigationState
+  | DaysNavigationState
 
 export const isSessionsNavigation = (
   state: NavigationState
@@ -838,6 +850,10 @@ export const isAutomationsNavigation = (
 export const isCaptureNavigation = (
   state: NavigationState
 ): state is CaptureNavigationState => state.navigator === 'capture'
+
+export const isDaysNavigation = (
+  state: NavigationState
+): state is DaysNavigationState => state.navigator === 'days'
 
 export const DEFAULT_NAVIGATION_STATE: NavigationState = {
   navigator: 'sessions',
@@ -866,6 +882,9 @@ export const getNavigationStateKey = (state: NavigationState): string => {
   }
   if (state.navigator === 'capture') {
     return state.details ? `capture/item/${state.details.id}` : 'capture'
+  }
+  if (state.navigator === 'days') {
+    return state.dateISO ? `days/${state.dateISO}` : 'days'
   }
   if (state.navigator === 'settings') {
     return `settings:${state.subpage}`
@@ -918,6 +937,11 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
   if (key.startsWith('capture/item/')) {
     const id = key.slice(13)
     return id ? { navigator: 'capture', details: { type: 'item', id } } : { navigator: 'capture', details: null }
+  }
+  if (key === 'days') return { navigator: 'days' }
+  if (key.startsWith('days/')) {
+    const dateISO = key.slice(5)
+    return /^\d{4}-\d{2}-\d{2}$/.test(dateISO) ? { navigator: 'days', dateISO } : { navigator: 'days' }
   }
 
   // Handle settings

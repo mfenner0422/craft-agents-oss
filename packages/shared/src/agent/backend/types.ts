@@ -531,6 +531,9 @@ export interface AgentBackend {
   /** Refresh same-workspace configuration without clearing session state */
   refreshWorkspaceConfig(workspace: Workspace): void;
 
+  /** Clear pinned daily context after days/vault settings change */
+  clearPinnedDailyContext?(): void;
+
   /** Set session ID */
   setSessionId(sessionId: string | null): void;
 

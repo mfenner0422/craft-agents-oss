@@ -290,6 +290,13 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.capture.ENRICH_URL,
   RPC_CHANNELS.capture.SAVED,
 
+  // days — workspace vault content
+  RPC_CHANNELS.days.ENSURE,
+  RPC_CHANNELS.days.LIST,
+  RPC_CHANNELS.days.INCOMPLETE_TASKS,
+  RPC_CHANNELS.days.PULL_FORWARD,
+  RPC_CHANNELS.days.UPDATE_FILE,
+
   // llmConnections — LLM config lives on server running workspace
   RPC_CHANNELS.llmConnections.LIST,
   RPC_CHANNELS.llmConnections.LIST_WITH_STATUS,

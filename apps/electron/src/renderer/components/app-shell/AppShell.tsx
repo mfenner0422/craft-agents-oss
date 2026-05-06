@@ -44,7 +44,9 @@ import { HeaderIconButton } from "@/components/ui/HeaderIconButton"
 import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipTrigger, TooltipContent, DocumentFormattedMarkdownOverlay } from "@craft-agent/ui"
 import { CaptureInboxList } from "@craft-agent/ui/capture"
+import { DaysListColumn } from "@craft-agent/ui/days"
 import type { CaptureItem } from "@craft-agent/shared/capture"
+import { todayDateISO } from "@craft-agent/shared/days/date"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -114,6 +116,7 @@ import {
   isSkillsNavigation,
   isAutomationsNavigation,
   isCaptureNavigation,
+  isDaysNavigation,
   type NavigationState,
 } from "@/contexts/NavigationContext"
 import type { SettingsSubpage } from "../../../shared/types"
@@ -841,6 +844,13 @@ function AppShellContent({
     getAutomationHistory, handleReplayAutomation,
   } = useAutomations(activeWorkspaceId)
   const [captureItems, setCaptureItems] = React.useState<CaptureItem[]>([])
+  const [days, setDays] = React.useState<string[]>([])
+
+  const addDayToNavigator = React.useCallback((dateISO: string) => {
+    setDays(prev => prev.includes(dateISO)
+      ? prev
+      : [...prev, dateISO].sort((a, b) => b.localeCompare(a)))
+  }, [])
 
   React.useEffect(() => {
     if (!activeWorkspaceId) {
@@ -860,6 +870,21 @@ function AppShellContent({
       })
     })
   }, [activeWorkspaceId])
+
+  React.useEffect(() => {
+    if (!activeWorkspaceId) {
+      setDays([])
+      return
+    }
+    window.electronAPI.listDays(activeWorkspaceId).then(setDays).catch(() => setDays([]))
+  }, [activeWorkspaceId])
+
+  React.useEffect(() => {
+    if (isDaysNavigation(navState) && navState.dateISO) {
+      addDayToNavigator(navState.dateISO)
+    }
+  }, [addDayToNavigator, navState])
+
 
   // Whether local MCP servers are enabled (affects stdio source status)
   const [localMcpEnabled, setLocalMcpEnabled] = React.useState(true)
@@ -1744,6 +1769,23 @@ function AppShellContent({
     navigate(routes.view.capture(itemId))
   }, [])
 
+  const handleDaysClick = useCallback(() => {
+    const today = todayDateISO()
+    if (activeWorkspaceId) {
+      window.electronAPI.ensureDay(activeWorkspaceId, today).then(() => {
+        addDayToNavigator(today)
+        navigate(routes.view.days(today))
+      })
+    } else {
+      navigate(routes.view.days())
+    }
+  }, [activeWorkspaceId, addDayToNavigator, navigate])
+
+  const handleDaySelect = useCallback((dateISO: string) => {
+    addDayToNavigator(dateISO)
+    navigate(routes.view.days(dateISO))
+  }, [addDayToNavigator, navigate])
+
   // Handler for settings view
   const handleSettingsClick = useCallback((subpage: SettingsSubpage = 'app') => {
     navigate(routes.view.settings(subpage))
@@ -1965,6 +2007,7 @@ function AppShellContent({
 
     // 1. Sessions section: All Sessions (expandable) with status items, Flagged, Archived as children
     result.push({ id: 'nav:allSessions', type: 'nav', action: handleAllSessionsClick })
+    result.push({ id: 'nav:days', type: 'nav', action: handleDaysClick })
     for (const state of effectiveSessionStatuses) {
       result.push({ id: `nav:state:${state.id}`, type: 'nav', action: () => handleSessionStatusClick(state.id) })
     }
@@ -1993,7 +2036,7 @@ function AppShellContent({
     result.push({ id: 'nav:whats-new', type: 'nav', action: handleWhatsNewClick })
 
     return result
-  }, [handleAllSessionsClick, handleFlaggedClick, handleArchivedClick, handleSessionStatusClick, effectiveSessionStatuses, handleLabelClick, labelConfigs, labelTree, viewConfigs, handleViewClick, handleSourcesClick, handleCaptureClick, handleSkillsClick, handleAutomationsClick, handleSettingsClick, handleWhatsNewClick])
+  }, [handleAllSessionsClick, handleDaysClick, handleFlaggedClick, handleArchivedClick, handleSessionStatusClick, effectiveSessionStatuses, handleLabelClick, labelConfigs, labelTree, viewConfigs, handleViewClick, handleSourcesClick, handleCaptureClick, handleSkillsClick, handleAutomationsClick, handleSettingsClick, handleWhatsNewClick])
 
   // Toggle folder expanded state
   const handleToggleFolder = React.useCallback((path: string) => {
@@ -2124,6 +2167,7 @@ function AppShellContent({
     }
 
     if (isCaptureNavigation(navState)) return t("sidebar.capture")
+    if (isDaysNavigation(navState)) return t("sidebar.days")
 
     // Settings navigator
     if (isSettingsNavigation(navState)) return t("sidebar.settings")
@@ -2288,6 +2332,14 @@ function AppShellContent({
                   links={[
                     // --- Sessions Section ---
                     // All Sessions: expandable with status children (sortable) + Flagged & Archived as trailing items
+                    {
+                      id: "nav:days",
+                      title: t("sidebar.days"),
+                      label: days.length > 0 ? String(days.length) : undefined,
+                      icon: Calendar,
+                      variant: isDaysNavigation(navState) ? "default" : "ghost",
+                      onClick: handleDaysClick,
+                    },
                     {
                       id: "nav:allSessions",
                       title: t("sidebar.allSessions"),
@@ -3167,6 +3219,13 @@ function AppShellContent({
                       onClick={() => window.electronAPI.openCaptureWindow(activeWorkspaceId)}
                     />
                   )}
+                  {isDaysNavigation(navState) && (
+                    <HeaderIconButton
+                      icon={<Calendar className="h-4 w-4" />}
+                      tooltip={t("common.today")}
+                      onClick={handleDaysClick}
+                    />
+                  )}
                 </>
               }
             />
@@ -3213,6 +3272,13 @@ function AppShellContent({
                 items={captureItems}
                 selectedItemId={navState.details?.type === 'item' ? navState.details.id : null}
                 onSelectItem={handleCaptureItemClick}
+              />
+            )}
+            {isDaysNavigation(navState) && (
+              <DaysListColumn
+                days={days}
+                selectedDate={navState.dateISO ?? null}
+                onSelectDay={handleDaySelect}
               />
             )}
             {isSettingsNavigation(navState) && (

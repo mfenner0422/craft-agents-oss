@@ -267,6 +267,13 @@ export const RPC_CHANNELS = {
     SAVED: 'capture:saved',
     OPEN: 'capture:open',
   },
+  days: {
+    ENSURE: 'days:ensure',
+    LIST: 'days:list',
+    INCOMPLETE_TASKS: 'days:incompleteTasks',
+    PULL_FORWARD: 'days:pullForward',
+    UPDATE_FILE: 'days:updateFile',
+  },
   permissions: {
     GET_DEFAULTS: 'permissions:getDefaults',
     DEFAULTS_CHANGED: 'permissions:defaultsChanged',

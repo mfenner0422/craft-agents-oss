@@ -1513,6 +1513,7 @@ export class SessionManager implements ISessionManager {
       if (managed.workspace.rootPath !== workspaceRootPath) continue
       managed.workspace = updatedWorkspace
       managed.agent?.refreshWorkspaceConfig(updatedWorkspace)
+      managed.agent?.clearPinnedDailyContext?.()
     }
   }
 

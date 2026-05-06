@@ -185,6 +185,9 @@ export const routes = {
 
     capture: (itemId?: string) =>
       itemId ? `capture/item/${itemId}` as const : 'capture' as const,
+
+    days: (dateISO?: string) =>
+      dateISO ? `days/${dateISO}` as const : 'days' as const,
   },
 } as const
 

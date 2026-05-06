@@ -529,6 +529,10 @@ export abstract class BaseAgent implements AgentBackend {
     this.promptBuilder.setWorkspace(workspace);
   }
 
+  clearPinnedDailyContext(): void {
+    this.promptBuilder.clearPinnedDailyContext();
+  }
+
   getSessionId(): string | null {
     return this._sessionId;
   }
