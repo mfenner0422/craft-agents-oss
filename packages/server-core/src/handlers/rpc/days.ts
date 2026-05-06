@@ -6,6 +6,14 @@ import { RPC_CHANNELS } from '@craft-agent/shared/protocol';
 import type { RpcServer } from '@craft-agent/server-core/transport';
 import type { HandlerDeps } from '../handler-deps';
 
+export const HANDLED_CHANNELS = [
+  RPC_CHANNELS.days.ENSURE,
+  RPC_CHANNELS.days.LIST,
+  RPC_CHANNELS.days.INCOMPLETE_TASKS,
+  RPC_CHANNELS.days.PULL_FORWARD,
+  RPC_CHANNELS.days.UPDATE_FILE,
+] as const;
+
 export function registerDaysHandlers(server: RpcServer, _deps: HandlerDeps): void {
   server.handle(RPC_CHANNELS.days.ENSURE, async (_ctx, workspaceId: string, dateISO?: string) => {
     if (dateISO) assertDateISO(dateISO);
