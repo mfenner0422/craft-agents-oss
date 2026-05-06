@@ -31,6 +31,7 @@ import {
   Radio,
   Bot,
   Info,
+  Vault,
 } from "lucide-react"
 import {
   DndContext,
@@ -2372,14 +2373,6 @@ function AppShellContent({
                     // --- Sessions Section ---
                     // All Sessions: expandable with status children (sortable) + Flagged & Archived as trailing items
                     {
-                      id: "nav:days",
-                      title: t("sidebar.days"),
-                      label: days.length > 0 ? String(days.length) : undefined,
-                      icon: Calendar,
-                      variant: isDaysNavigation(navState) ? "default" : "ghost",
-                      onClick: handleDaysClick,
-                    },
-                    {
                       id: "nav:allSessions",
                       title: t("sidebar.allSessions"),
                       label: String(workspaceSessionMetas.length),
@@ -2451,14 +2444,6 @@ function AppShellContent({
                         },
                       ],
                     },
-                    {
-                      id: "nav:capture",
-                      title: t("sidebar.capture"),
-                      label: captureItems.length > 0 ? String(captureItems.length) : undefined,
-                      icon: Inbox,
-                      variant: isCaptureNavigation(navState) ? "default" : "ghost",
-                      onClick: handleCaptureClick,
-                    },
                     // Labels: navigable header (shows all labeled sessions) + hierarchical tree (drag-and-drop reorder + re-parent)
                     {
                       id: "nav:labels",
@@ -2479,7 +2464,37 @@ function AppShellContent({
                       items: buildLabelSidebarItems(labelTree),
                     },
                     // --- Separator ---
-                    { id: "separator:chats-sources", type: "separator" },
+                    { id: "separator:sessions-vault", type: "separator" },
+                    // --- Vault Section (Days + Capture) ---
+                    {
+                      id: "nav:vault",
+                      title: t("sidebar.vault"),
+                      icon: Vault,
+                      variant: (isDaysNavigation(navState) || isCaptureNavigation(navState)) ? "default" : "ghost",
+                      expandable: true,
+                      expanded: isExpanded('nav:vault'),
+                      onToggle: () => toggleExpanded('nav:vault'),
+                      items: [
+                        {
+                          id: "nav:capture",
+                          title: t("sidebar.capture"),
+                          label: captureItems.length > 0 ? String(captureItems.length) : undefined,
+                          icon: Inbox,
+                          variant: isCaptureNavigation(navState) ? "default" : "ghost",
+                          onClick: handleCaptureClick,
+                        },
+                        {
+                          id: "nav:days",
+                          title: t("sidebar.days"),
+                          label: days.length > 0 ? String(days.length) : undefined,
+                          icon: Calendar,
+                          variant: isDaysNavigation(navState) ? "default" : "ghost",
+                          onClick: handleDaysClick,
+                        },
+                      ],
+                    },
+                    // --- Separator ---
+                    { id: "separator:vault-sources", type: "separator" },
                     // --- Sources & Skills Section ---
                     {
                       id: "nav:sources",
