@@ -4,6 +4,11 @@ import { assertDateISO, getDayFilePath, type DayFileKind } from './paths.ts';
 import { atomicWriteFileSync } from '../utils/files.ts';
 
 const DAY_FILE_KINDS: DayFileKind[] = ['tasks', 'scratch', 'journal'];
+const BUNDLED_TEMPLATES: Record<DayFileKind, string> = {
+  tasks: '# Tasks\n\n- [ ] Plan the day\n',
+  scratch: '# Scratch\n',
+  journal: '# Journal\n',
+};
 
 export interface DayRecord {
   dateISO: string;
@@ -92,7 +97,7 @@ export function updateDayFile(vaultRoot: string, dateISO: string, kind: DayFileK
 function loadTemplate(vaultRoot: string, kind: DayFileKind): string {
   const override = join(vaultRoot, '_templates', 'daily', `${kind}.md`);
   if (existsSync(override)) return readFileSync(override, 'utf-8');
-  return readFileSync(new URL(`./templates/${kind}.md`, import.meta.url), 'utf-8');
+  return BUNDLED_TEMPLATES[kind];
 }
 
 function generateTaskId(value: string): string {
