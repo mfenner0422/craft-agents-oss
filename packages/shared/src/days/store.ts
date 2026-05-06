@@ -81,6 +81,14 @@ export function pullForwardTasks(vaultRoot: string, fromDateISO: string, toDateI
   return tasks;
 }
 
+export function updateDayFile(vaultRoot: string, dateISO: string, kind: DayFileKind, content: string): DayRecord {
+  assertDateISO(dateISO);
+  const filePath = getDayFilePath(vaultRoot, dateISO, kind);
+  mkdirSync(dirname(filePath), { recursive: true });
+  atomicWriteFileSync(filePath, content.endsWith('\n') ? content : `${content}\n`);
+  return ensureDay(vaultRoot, dateISO);
+}
+
 function loadTemplate(vaultRoot: string, kind: DayFileKind): string {
   const override = join(vaultRoot, '_templates', 'daily', `${kind}.md`);
   if (existsSync(override)) return readFileSync(override, 'utf-8');

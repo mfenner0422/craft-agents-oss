@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'bun:test';
-import { ensureDay, getIncompleteTasks, listDays, pullForwardTasks } from '../store.ts';
+import { ensureDay, getIncompleteTasks, listDays, pullForwardTasks, updateDayFile } from '../store.ts';
 
 const tempDirs: string[] = [];
 
@@ -70,5 +70,11 @@ describe('days store', () => {
     pullForwardTasks(vaultRoot, '2026-05-05', '2026-05-06');
     const target = ensureDay(vaultRoot, '2026-05-06').files.tasks;
     expect(target.match(/task:abc/g)).toHaveLength(1);
+  });
+
+  it('updates an individual day file', () => {
+    const vaultRoot = tempVault();
+    updateDayFile(vaultRoot, '2026-05-06', 'journal', '# Updated\n');
+    expect(ensureDay(vaultRoot, '2026-05-06').files.journal).toBe('# Updated\n');
   });
 });

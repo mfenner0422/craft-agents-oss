@@ -37,7 +37,7 @@ import {
 import { CaptureItemView } from '@craft-agent/ui/capture'
 import type { CaptureItem } from '@craft-agent/shared/capture'
 import { DaysMainPane } from '@craft-agent/ui/days'
-import type { DayRecord } from '@craft-agent/shared/days'
+import type { DayFileKind, DayRecord, DayTask } from '@craft-agent/shared/days'
 import { useSessionSelection, useIsMultiSelectActive, useSelectedIds, useSelectionCount } from '@/hooks/useSession'
 import { sourceSelection, skillSelection, automationSelection } from '@/hooks/useEntitySelection'
 import { extractLabelId } from '@craft-agent/shared/labels'
@@ -98,6 +98,7 @@ export function MainContentPanel({
   const automations = useAtomValue(automationsAtom)
   const [captureItems, setCaptureItems] = useState<CaptureItem[]>([])
   const [day, setDay] = useState<DayRecord | null>(null)
+  const [carryForwardTasks, setCarryForwardTasks] = useState<DayTask[]>([])
 
   // Execution history for the selected automation
   const selectedAutomationId = isAutomationsNavigation(navState) ? navState.details?.automationId : undefined
@@ -134,8 +135,26 @@ export function MainContentPanel({
 
   useEffect(() => {
     if (!activeWorkspaceId || !isDaysNavigation(navState)) return
-    window.electronAPI.ensureDay(activeWorkspaceId, navState.dateISO).then(setDay).catch(() => setDay(null))
+    const dateISO = navState.dateISO ?? new Date().toISOString().slice(0, 10)
+    window.electronAPI.ensureDay(activeWorkspaceId, dateISO).then(setDay).catch(() => setDay(null))
+    const yesterday = new Date(`${dateISO}T00:00:00`)
+    yesterday.setDate(yesterday.getDate() - 1)
+    window.electronAPI.getIncompleteDayTasks(activeWorkspaceId, yesterday.toISOString().slice(0, 10)).then(setCarryForwardTasks).catch(() => setCarryForwardTasks([]))
   }, [activeWorkspaceId, navState])
+
+  const handlePullForwardDayTasks = useCallback(async () => {
+    if (!activeWorkspaceId || !day) return
+    const yesterday = new Date(`${day.dateISO}T00:00:00`)
+    yesterday.setDate(yesterday.getDate() - 1)
+    await window.electronAPI.pullForwardDayTasks(activeWorkspaceId, yesterday.toISOString().slice(0, 10), day.dateISO)
+    setDay(await window.electronAPI.ensureDay(activeWorkspaceId, day.dateISO))
+    setCarryForwardTasks([])
+  }, [activeWorkspaceId, day])
+
+  const handleUpdateDayFile = useCallback(async (kind: DayFileKind, content: string) => {
+    if (!activeWorkspaceId || !day) return
+    setDay(await window.electronAPI.updateDayFile(activeWorkspaceId, day.dateISO, kind, content))
+  }, [activeWorkspaceId, day])
 
   // Source multi-select state
   const isSourceMultiSelectActive = sourceSelection.useIsMultiSelectActive()
@@ -381,7 +400,12 @@ export function MainContentPanel({
   if (isDaysNavigation(navState)) {
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
-        <DaysMainPane day={day} />
+        <DaysMainPane
+          day={day}
+          carryForwardTasks={carryForwardTasks}
+          onPullForward={handlePullForwardDayTasks}
+          onUpdateFile={handleUpdateDayFile}
+        />
       </Panel>
     )
   }

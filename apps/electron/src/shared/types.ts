@@ -439,6 +439,7 @@ export interface ElectronAPI {
   listDays(workspaceId: string, limit?: number): Promise<string[]>
   getIncompleteDayTasks(workspaceId: string, dateISO: string): Promise<import('@craft-agent/shared/days').DayTask[]>
   pullForwardDayTasks(workspaceId: string, fromDateISO: string, toDateISO: string): Promise<import('@craft-agent/shared/days').DayTask[]>
+  updateDayFile(workspaceId: string, dateISO: string, kind: import('@craft-agent/shared/days').DayFileKind, content: string): Promise<import('@craft-agent/shared/days').DayRecord>
 
   // Folder dialog
   openFolderDialog(): Promise<string | null>

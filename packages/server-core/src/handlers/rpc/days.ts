@@ -1,5 +1,5 @@
 import { getWorkspaceOrThrow } from '@craft-agent/server-core/handlers';
-import { assertDateISO, ensureDay, getIncompleteTasks, listDays, pullForwardTasks } from '@craft-agent/shared/days';
+import { assertDateISO, ensureDay, getIncompleteTasks, listDays, pullForwardTasks, updateDayFile, type DayFileKind } from '@craft-agent/shared/days';
 import { resolveVaultRoot } from '@craft-agent/shared/vault';
 import { loadWorkspaceConfig } from '@craft-agent/shared/workspaces';
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol';
@@ -33,5 +33,13 @@ export function registerDaysHandlers(server: RpcServer, _deps: HandlerDeps): voi
     const workspace = getWorkspaceOrThrow(workspaceId);
     const config = loadWorkspaceConfig(workspace.rootPath);
     return pullForwardTasks(resolveVaultRoot(workspace.rootPath, config), fromDateISO, toDateISO);
+  });
+
+  server.handle(RPC_CHANNELS.days.UPDATE_FILE, async (_ctx, workspaceId: string, dateISO: string, kind: DayFileKind, content: string) => {
+    assertDateISO(dateISO);
+    if (!['tasks', 'scratch', 'journal'].includes(kind)) throw new Error(`Invalid day file kind: ${kind}`);
+    const workspace = getWorkspaceOrThrow(workspaceId);
+    const config = loadWorkspaceConfig(workspace.rootPath);
+    return updateDayFile(resolveVaultRoot(workspace.rootPath, config), dateISO, kind, content);
   });
 }

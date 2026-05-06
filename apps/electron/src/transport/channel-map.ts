@@ -186,6 +186,7 @@ export const CHANNEL_MAP = {
   listDays: invoke(RPC_CHANNELS.days.LIST),
   getIncompleteDayTasks: invoke(RPC_CHANNELS.days.INCOMPLETE_TASKS),
   pullForwardDayTasks: invoke(RPC_CHANNELS.days.PULL_FORWARD),
+  updateDayFile: invoke(RPC_CHANNELS.days.UPDATE_FILE),
 
   // Folder dialog
   openFolderDialog: invoke(RPC_CHANNELS.dialog.OPEN_FOLDER),

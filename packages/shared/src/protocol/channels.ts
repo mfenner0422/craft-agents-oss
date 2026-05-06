@@ -270,6 +270,7 @@ export const RPC_CHANNELS = {
     LIST: 'days:list',
     INCOMPLETE_TASKS: 'days:incompleteTasks',
     PULL_FORWARD: 'days:pullForward',
+    UPDATE_FILE: 'days:updateFile',
   },
   permissions: {
     GET_DEFAULTS: 'permissions:getDefaults',
