@@ -50,12 +50,6 @@ export function registerSettingsGuiHandlers(server: RpcServer, _deps: HandlerDep
       return { ok: false, error: 'invalid' }
     }
 
-    const bindResult = captureHotkeyBinder?.(trimmed) ?? { ok: true }
-    if (!bindResult.ok) {
-      server.push(RPC_CHANNELS.app.CAPTURE_HOTKEY_CONFLICT, { to: 'all' }, { accelerator: trimmed, error: bindResult.error ?? 'conflict' })
-      return bindResult
-    }
-
     const { loadPreferences, savePreferences } = await import('@craft-agent/shared/config/preferences')
     const prefs = loadPreferences()
     const bindResult = await captureHotkeyBinder(trimmed)
