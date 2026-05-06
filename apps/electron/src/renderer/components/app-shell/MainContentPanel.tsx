@@ -128,6 +128,17 @@ export function MainContentPanel({
     window.electronAPI.listCaptureInbox(activeWorkspaceId).then(setCaptureItems).catch(() => setCaptureItems([]))
   }, [activeWorkspaceId, navState])
 
+  useEffect(() => {
+    if (!activeWorkspaceId || !isCaptureNavigation(navState)) return
+    return window.electronAPI.onCaptureSaved((payload) => {
+      if (payload.workspaceId !== activeWorkspaceId) return
+      setCaptureItems(prev => {
+        const withoutSaved = prev.filter(item => item.id !== payload.item.id)
+        return [payload.item, ...withoutSaved]
+      })
+    })
+  }, [activeWorkspaceId, navState])
+
   // Source multi-select state
   const isSourceMultiSelectActive = sourceSelection.useIsMultiSelectActive()
   const sourceSelectionCount = sourceSelection.useSelectionCount()

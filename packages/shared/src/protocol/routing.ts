@@ -59,6 +59,9 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.shell.OPEN_FILE,
   RPC_CHANNELS.shell.SHOW_IN_FOLDER,
 
+  // capture — open capture window (Electron-only)
+  RPC_CHANNELS.capture.OPEN,
+
   // skills — local filesystem actions (guarded for remote)
   RPC_CHANNELS.skills.OPEN_EDITOR,
   RPC_CHANNELS.skills.OPEN_FINDER,
@@ -285,6 +288,7 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.capture.SAVE,
   RPC_CHANNELS.capture.LIST,
   RPC_CHANNELS.capture.ENRICH_URL,
+  RPC_CHANNELS.capture.SAVED,
 
   // llmConnections — LLM config lives on server running workspace
   RPC_CHANNELS.llmConnections.LIST,

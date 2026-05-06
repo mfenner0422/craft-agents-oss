@@ -88,6 +88,7 @@ async function getExpectedCoreChannels(): Promise<Set<string>> {
   const [
     auth,
     automations,
+    capture,
     files,
     labels,
     llm,
@@ -100,9 +101,12 @@ async function getExpectedCoreChannels(): Promise<Set<string>> {
     system,
     workspace,
     onboarding,
+    resources,
+    transfer,
   ] = await Promise.all([
     import('@craft-agent/server-core/handlers/rpc/auth'),
     import('@craft-agent/server-core/handlers/rpc/automations'),
+    import('@craft-agent/server-core/handlers/rpc/capture'),
     import('@craft-agent/server-core/handlers/rpc/files'),
     import('@craft-agent/server-core/handlers/rpc/labels'),
     import('@craft-agent/server-core/handlers/rpc/llm-connections'),
@@ -115,11 +119,14 @@ async function getExpectedCoreChannels(): Promise<Set<string>> {
     import('@craft-agent/server-core/handlers/rpc/system'),
     import('@craft-agent/server-core/handlers/rpc/workspace'),
     import('@craft-agent/server-core/handlers/rpc/onboarding'),
+    import('@craft-agent/server-core/handlers/rpc/resources'),
+    import('@craft-agent/server-core/handlers/rpc/transfer'),
   ])
 
   return new Set([
     ...auth.HANDLED_CHANNELS,
     ...automations.HANDLED_CHANNELS,
+    ...capture.HANDLED_CHANNELS,
     ...files.HANDLED_CHANNELS,
     ...labels.HANDLED_CHANNELS,
     ...llm.HANDLED_CHANNELS,
@@ -132,6 +139,8 @@ async function getExpectedCoreChannels(): Promise<Set<string>> {
     ...system.CORE_HANDLED_CHANNELS,
     ...workspace.CORE_HANDLED_CHANNELS,
     ...onboarding.HANDLED_CHANNELS,
+    ...resources.HANDLED_CHANNELS,
+    ...transfer.HANDLED_CHANNELS,
   ])
 }
 

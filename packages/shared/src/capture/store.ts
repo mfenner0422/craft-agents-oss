@@ -11,6 +11,7 @@ export interface CaptureItemInput {
   body: string;
   tags?: string[];
   now?: Date;
+  skipEnrichment?: boolean;
 }
 
 export interface CaptureItem {
@@ -46,7 +47,7 @@ export function captureItem(input: CaptureItemInput): CaptureItem {
     tags,
   }, input.body);
 
-  if (url) {
+  if (url && !input.skipEnrichment) {
     void enrichUrl(url).then(meta => {
       if (!meta.title && !meta.description) return;
       writeMarkdown(filePath, {
@@ -98,14 +99,24 @@ export function listInboxItems(vaultRoot: string, limit = 100): CaptureItem[] {
     });
 }
 
-export async function enrichUrl(url: string): Promise<{ title?: string; description?: string }> {
+export interface EnrichResult {
+  title?: string;
+  description?: string;
+  author?: string;
+  site?: string;
+  contentMarkdown?: string;
+  wordCount?: number;
+  published?: string;
+}
+
+export async function enrichUrl(url: string): Promise<EnrichResult> {
   const parsed = new URL(url);
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     throw new Error('Only http and https URLs can be enriched');
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5_000);
+  const timeout = setTimeout(() => controller.abort(), 10_000);
   try {
     const response = await fetch(parsed.toString(), {
       signal: controller.signal,
@@ -113,44 +124,23 @@ export async function enrichUrl(url: string): Promise<{ title?: string; descript
     });
     const contentType = response.headers.get('content-type') ?? '';
     if (!contentType.toLowerCase().includes('text/html')) return {};
-    const html = await readTextWithLimit(response, 256 * 1024);
+    const html = await response.text();
+
+    const { Defuddle } = await import('defuddle/node');
+    const result = await Defuddle(html, parsed.toString(), { markdown: true });
+
     return {
-      title: matchMeta(html, /<title[^>]*>([^<]*)<\/title>/i),
-      description: matchMeta(html, /<meta\s+name=["']description["']\s+content=["']([^"']*)["'][^>]*>/i),
+      title: result.title || undefined,
+      description: result.description || undefined,
+      author: result.author || undefined,
+      site: result.site || undefined,
+      contentMarkdown: result.content || undefined,
+      wordCount: result.wordCount || undefined,
+      published: result.published || undefined,
     };
   } finally {
     clearTimeout(timeout);
   }
-}
-
-async function readTextWithLimit(response: Response, limitBytes: number): Promise<string> {
-  const reader = response.body?.getReader();
-  if (!reader) return response.text();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (!value) continue;
-    total += value.byteLength;
-    if (total > limitBytes) {
-      chunks.push(value.slice(0, Math.max(0, value.byteLength - (total - limitBytes))));
-      break;
-    }
-    chunks.push(value);
-  }
-  return new TextDecoder().decode(concatChunks(chunks));
-}
-
-function concatChunks(chunks: Uint8Array[]): Uint8Array {
-  const total = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
-  const output = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    output.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return output;
 }
 
 function safeHostname(url: string): string {
@@ -175,16 +165,3 @@ function formatTimestamp(date: Date): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
 }
 
-function matchMeta(html: string, pattern: RegExp): string | undefined {
-  const value = html.match(pattern)?.[1]?.trim();
-  return value ? decodeHtml(value) : undefined;
-}
-
-function decodeHtml(value: string): string {
-  return value
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
-}

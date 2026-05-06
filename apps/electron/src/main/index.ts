@@ -722,6 +722,10 @@ app.whenReady().then(async () => {
       captureManager.start()
       setCaptureHotkeyBinder((accelerator) => captureManager?.setHotkey(accelerator) ?? { ok: false, error: 'unavailable' })
       sessionManager.setOnWorkspaceConfigChange(() => captureManager?.refreshTargetWorkspaces())
+
+      instance.wsServer.handle(RPC_CHANNELS.capture.OPEN, async (_ctx, workspaceId: string) => {
+        openCaptureWindow(workspaceId)
+      })
       oauthFlowStore = instance.oauthFlowStore
       moduleSink = instance.wsServer.push.bind(instance.wsServer)
       moduleClientResolver = resolveClientId

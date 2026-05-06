@@ -850,6 +850,17 @@ function AppShellContent({
     window.electronAPI.listCaptureInbox(activeWorkspaceId).then(setCaptureItems).catch(() => setCaptureItems([]))
   }, [activeWorkspaceId])
 
+  React.useEffect(() => {
+    if (!activeWorkspaceId) return
+    return window.electronAPI.onCaptureSaved((payload) => {
+      if (payload.workspaceId !== activeWorkspaceId) return
+      setCaptureItems(prev => {
+        const withoutSaved = prev.filter(item => item.id !== payload.item.id)
+        return [payload.item, ...withoutSaved]
+      })
+    })
+  }, [activeWorkspaceId])
+
   // Whether local MCP servers are enabled (affects stdio source status)
   const [localMcpEnabled, setLocalMcpEnabled] = React.useState(true)
 
@@ -3146,6 +3157,14 @@ function AppShellContent({
                         />
                       }
                       {...getEditConfig('automation-config', activeWorkspace.rootPath)}
+                    />
+                  )}
+                  {/* New Capture button (only for capture mode) */}
+                  {isCaptureNavigation(navState) && activeWorkspaceId && (
+                    <HeaderIconButton
+                      icon={<Plus className="h-4 w-4" />}
+                      tooltip={t("sidebar.capture")}
+                      onClick={() => window.electronAPI.openCaptureWindow(activeWorkspaceId)}
                     />
                   )}
                 </>

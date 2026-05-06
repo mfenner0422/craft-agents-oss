@@ -435,6 +435,8 @@ export interface ElectronAPI {
   saveCapture(input: { workspaceId: string; source: string; url?: string; title?: string; body: string; tags?: string[] }): Promise<import('@craft-agent/shared/capture').CaptureItem>
   listCaptureInbox(workspaceId: string, limit?: number): Promise<import('@craft-agent/shared/capture').CaptureItem[]>
   enrichCaptureUrl(url: string): Promise<{ title?: string; description?: string }>
+  openCaptureWindow(workspaceId: string): Promise<void>
+  onCaptureSaved(callback: (payload: { workspaceId: string; item: import('@craft-agent/shared/capture').CaptureItem }) => void): () => void
 
   // Folder dialog
   openFolderDialog(): Promise<string | null>

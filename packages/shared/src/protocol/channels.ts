@@ -264,6 +264,8 @@ export const RPC_CHANNELS = {
     SAVE: 'capture:save',
     LIST: 'capture:list',
     ENRICH_URL: 'capture:enrichUrl',
+    SAVED: 'capture:saved',
+    OPEN: 'capture:open',
   },
   permissions: {
     GET_DEFAULTS: 'permissions:getDefaults',

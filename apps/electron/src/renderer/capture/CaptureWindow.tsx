@@ -15,8 +15,10 @@ function CaptureWindow() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const hasUrlOrTitle = !!(url.trim() || title.trim())
+
   const save = useCallback(async () => {
-    if (!workspaceId || saving || (!body.trim() && !url.trim())) return
+    if (!workspaceId || saving || !hasUrlOrTitle) return
     setSaving(true)
     setError(null)
     try {
@@ -25,7 +27,7 @@ function CaptureWindow() {
         source: 'global-hotkey',
         url: url.trim() || undefined,
         title: title.trim() || undefined,
-        body: body.trim() || url.trim(),
+        body: body.trim() || url.trim() || title.trim(),
         tags: [],
       })
       window.close()
@@ -34,7 +36,7 @@ function CaptureWindow() {
     } finally {
       setSaving(false)
     }
-  }, [body, saving, title, url, workspaceId])
+  }, [body, hasUrlOrTitle, saving, title, url, workspaceId])
 
   return (
     <main className="h-screen w-screen bg-background text-foreground border border-border/60 shadow-2xl">
@@ -74,7 +76,7 @@ function CaptureWindow() {
           <button
             type="button"
             className="h-8 px-3 inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground text-[13px] disabled:opacity-50"
-            disabled={saving || (!body.trim() && !url.trim())}
+            disabled={saving || !hasUrlOrTitle}
             onClick={save}
           >
             <Save className="h-4 w-4" />
