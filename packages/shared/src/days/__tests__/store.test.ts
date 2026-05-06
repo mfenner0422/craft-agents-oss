@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { ensureDay, getIncompleteTasks, listDays, pullForwardTasks, updateDayFile } from '../store.ts';
+import { addDays, formatLocalDateISO, parseDateISO } from '../date.ts';
 
 const tempDirs: string[] = [];
 
@@ -17,6 +18,13 @@ afterEach(() => {
 });
 
 describe('days store', () => {
+  it('formats day dates using local calendar fields', () => {
+    expect(formatLocalDateISO(new Date(2026, 4, 6))).toBe('2026-05-06');
+    expect(formatLocalDateISO(parseDateISO('2026-05-06'))).toBe('2026-05-06');
+    expect(addDays('2026-05-06', -1)).toBe('2026-05-05');
+    expect(addDays('2026-05-06', 1)).toBe('2026-05-07');
+  });
+
   it('creates the three daily files deterministically', () => {
     const vaultRoot = tempVault();
     const day = ensureDay(vaultRoot, '2026-05-06');

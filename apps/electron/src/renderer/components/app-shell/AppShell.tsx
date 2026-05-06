@@ -46,6 +46,7 @@ import { Tooltip, TooltipTrigger, TooltipContent, DocumentFormattedMarkdownOverl
 import { CaptureInboxList } from "@craft-agent/ui/capture"
 import { DaysListColumn } from "@craft-agent/ui/days"
 import type { CaptureItem } from "@craft-agent/shared/capture"
+import { todayDateISO } from "@craft-agent/shared/days/date"
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -845,6 +846,12 @@ function AppShellContent({
   const [captureItems, setCaptureItems] = React.useState<CaptureItem[]>([])
   const [days, setDays] = React.useState<string[]>([])
 
+  const addDayToNavigator = React.useCallback((dateISO: string) => {
+    setDays(prev => prev.includes(dateISO)
+      ? prev
+      : [...prev, dateISO].sort((a, b) => b.localeCompare(a)))
+  }, [])
+
   React.useEffect(() => {
     if (!activeWorkspaceId) {
       setCaptureItems([])
@@ -860,6 +867,12 @@ function AppShellContent({
     }
     window.electronAPI.listDays(activeWorkspaceId).then(setDays).catch(() => setDays([]))
   }, [activeWorkspaceId])
+
+  React.useEffect(() => {
+    if (isDaysNavigation(navState) && navState.dateISO) {
+      addDayToNavigator(navState.dateISO)
+    }
+  }, [addDayToNavigator, navState])
 
   // Whether local MCP servers are enabled (affects stdio source status)
   const [localMcpEnabled, setLocalMcpEnabled] = React.useState(true)
@@ -1745,20 +1758,21 @@ function AppShellContent({
   }, [])
 
   const handleDaysClick = useCallback(() => {
-    const today = new Date().toISOString().slice(0, 10)
+    const today = todayDateISO()
     if (activeWorkspaceId) {
       window.electronAPI.ensureDay(activeWorkspaceId, today).then(() => {
-        setDays(prev => prev.includes(today) ? prev : [today, ...prev])
+        addDayToNavigator(today)
         navigate(routes.view.days(today))
       })
     } else {
       navigate(routes.view.days())
     }
-  }, [activeWorkspaceId])
+  }, [activeWorkspaceId, addDayToNavigator, navigate])
 
   const handleDaySelect = useCallback((dateISO: string) => {
+    addDayToNavigator(dateISO)
     navigate(routes.view.days(dateISO))
-  }, [])
+  }, [addDayToNavigator, navigate])
 
   // Handler for settings view
   const handleSettingsClick = useCallback((subpage: SettingsSubpage = 'app') => {
@@ -3183,6 +3197,13 @@ function AppShellContent({
                         />
                       }
                       {...getEditConfig('automation-config', activeWorkspace.rootPath)}
+                    />
+                  )}
+                  {isDaysNavigation(navState) && (
+                    <HeaderIconButton
+                      icon={<Calendar className="h-4 w-4" />}
+                      tooltip={t("common.today")}
+                      onClick={handleDaysClick}
                     />
                   )}
                 </>

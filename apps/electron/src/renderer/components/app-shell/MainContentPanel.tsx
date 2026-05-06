@@ -37,6 +37,7 @@ import {
 import { CaptureItemView } from '@craft-agent/ui/capture'
 import type { CaptureItem } from '@craft-agent/shared/capture'
 import { DaysMainPane } from '@craft-agent/ui/days'
+import { addDays, todayDateISO } from '@craft-agent/shared/days/date'
 import type { DayFileKind, DayRecord, DayTask } from '@craft-agent/shared/days'
 import { useSessionSelection, useIsMultiSelectActive, useSelectedIds, useSelectionCount } from '@/hooks/useSession'
 import { sourceSelection, skillSelection, automationSelection } from '@/hooks/useEntitySelection'
@@ -135,18 +136,14 @@ export function MainContentPanel({
 
   useEffect(() => {
     if (!activeWorkspaceId || !isDaysNavigation(navState)) return
-    const dateISO = navState.dateISO ?? new Date().toISOString().slice(0, 10)
+    const dateISO = navState.dateISO ?? todayDateISO()
     window.electronAPI.ensureDay(activeWorkspaceId, dateISO).then(setDay).catch(() => setDay(null))
-    const yesterday = new Date(`${dateISO}T00:00:00`)
-    yesterday.setDate(yesterday.getDate() - 1)
-    window.electronAPI.getIncompleteDayTasks(activeWorkspaceId, yesterday.toISOString().slice(0, 10)).then(setCarryForwardTasks).catch(() => setCarryForwardTasks([]))
+    window.electronAPI.getIncompleteDayTasks(activeWorkspaceId, addDays(dateISO, -1)).then(setCarryForwardTasks).catch(() => setCarryForwardTasks([]))
   }, [activeWorkspaceId, navState])
 
   const handlePullForwardDayTasks = useCallback(async () => {
     if (!activeWorkspaceId || !day) return
-    const yesterday = new Date(`${day.dateISO}T00:00:00`)
-    yesterday.setDate(yesterday.getDate() - 1)
-    await window.electronAPI.pullForwardDayTasks(activeWorkspaceId, yesterday.toISOString().slice(0, 10), day.dateISO)
+    await window.electronAPI.pullForwardDayTasks(activeWorkspaceId, addDays(day.dateISO, -1), day.dateISO)
     setDay(await window.electronAPI.ensureDay(activeWorkspaceId, day.dateISO))
     setCarryForwardTasks([])
   }, [activeWorkspaceId, day])

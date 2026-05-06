@@ -1,3 +1,5 @@
+import { addDays, formatLocalDateISO, parseDateISO, todayDateISO } from '@craft-agent/shared/days/date';
+
 export interface DaysListColumnProps {
   days: string[];
   selectedDate?: string | null;
@@ -5,7 +7,7 @@ export interface DaysListColumnProps {
 }
 
 export function DaysListColumn({ days, selectedDate, onSelectDay }: DaysListColumnProps) {
-  const calendarDays = buildCalendarDays(selectedDate ?? days[0] ?? new Date().toISOString().slice(0, 10), new Set(days));
+  const calendarDays = buildCalendarDays(selectedDate ?? days[0] ?? todayDateISO(), new Set(days));
 
   return (
     <div className="h-full overflow-y-auto p-2">
@@ -39,14 +41,13 @@ export function DaysListColumn({ days, selectedDate, onSelectDay }: DaysListColu
 }
 
 function buildCalendarDays(anchorDateISO: string, daysWithContent: Set<string>) {
-  const anchor = new Date(`${anchorDateISO}T00:00:00`);
+  const anchor = parseDateISO(anchorDateISO);
   const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
   const start = new Date(first);
   start.setDate(first.getDate() - first.getDay());
   return Array.from({ length: 35 }, (_, index) => {
-    const date = new Date(start);
-    date.setDate(start.getDate() + index);
-    const dateISO = date.toISOString().slice(0, 10);
+    const dateISO = addDays(formatLocalDateISO(start), index);
+    const date = parseDateISO(dateISO);
     return {
       dateISO,
       label: String(date.getDate()),

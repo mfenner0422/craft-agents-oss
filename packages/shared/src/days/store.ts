@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { assertDateISO, getDayFilePath, type DayFileKind } from './paths.ts';
+import { todayDateISO } from './date.ts';
 import { atomicWriteFileSync } from '../utils/files.ts';
 
 const DAY_FILE_KINDS: DayFileKind[] = ['tasks', 'scratch', 'journal'];
@@ -21,7 +22,7 @@ export interface DayTask {
   line: string;
 }
 
-export function ensureDay(vaultRoot: string, dateISO = new Date().toISOString().slice(0, 10)): DayRecord {
+export function ensureDay(vaultRoot: string, dateISO = todayDateISO()): DayRecord {
   assertDateISO(dateISO);
   const files = {} as Record<DayFileKind, string>;
   for (const kind of DAY_FILE_KINDS) {
