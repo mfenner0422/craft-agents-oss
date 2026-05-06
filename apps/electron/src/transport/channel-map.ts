@@ -184,6 +184,8 @@ export const CHANNEL_MAP = {
   enrichCaptureUrl: invoke(RPC_CHANNELS.capture.ENRICH_URL),
   ensureDay: invoke(RPC_CHANNELS.days.ENSURE),
   listDays: invoke(RPC_CHANNELS.days.LIST),
+  getIncompleteDayTasks: invoke(RPC_CHANNELS.days.INCOMPLETE_TASKS),
+  pullForwardDayTasks: invoke(RPC_CHANNELS.days.PULL_FORWARD),
 
   // Folder dialog
   openFolderDialog: invoke(RPC_CHANNELS.dialog.OPEN_FOLDER),

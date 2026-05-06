@@ -10,6 +10,12 @@ export interface DayRecord {
   files: Record<DayFileKind, string>;
 }
 
+export interface DayTask {
+  id: string;
+  text: string;
+  line: string;
+}
+
 export function ensureDay(vaultRoot: string, dateISO = new Date().toISOString().slice(0, 10)): DayRecord {
   assertDateISO(dateISO);
   const files = {} as Record<DayFileKind, string>;
@@ -34,8 +40,57 @@ export function listDays(vaultRoot: string, limit = 30): string[] {
     .slice(0, limit);
 }
 
+export function getIncompleteTasks(vaultRoot: string, dateISO: string): DayTask[] {
+  assertDateISO(dateISO);
+  const filePath = getDayFilePath(vaultRoot, dateISO, 'tasks');
+  if (!existsSync(filePath)) return [];
+  return readFileSync(filePath, 'utf-8')
+    .split(/\r?\n/)
+    .filter(line => /^\s*-\s+\[\s\]\s+/.test(line))
+    .map(line => {
+      const id = line.match(/<!--\s*task:([a-zA-Z0-9_-]+)\s*-->/)?.[1] ?? generateTaskId(line);
+      const text = line
+        .replace(/^\s*-\s+\[\s\]\s+/, '')
+        .replace(/\s*<!--\s*task:[a-zA-Z0-9_-]+\s*-->\s*$/, '')
+        .trim();
+      return { id, text, line };
+    });
+}
+
+export function pullForwardTasks(vaultRoot: string, fromDateISO: string, toDateISO: string): DayTask[] {
+  assertDateISO(fromDateISO);
+  assertDateISO(toDateISO);
+  ensureDay(vaultRoot, toDateISO);
+  const tasks = getIncompleteTasks(vaultRoot, fromDateISO);
+  if (tasks.length === 0) return [];
+
+  const targetPath = getDayFilePath(vaultRoot, toDateISO, 'tasks');
+  const current = readFileSync(targetPath, 'utf-8');
+  const existingIds = new Set(
+    Array.from(current.matchAll(/<!--\s*task:([a-zA-Z0-9_-]+)\s*-->/g)).map(match => match[1])
+  );
+  const additions = tasks
+    .filter(task => !existingIds.has(task.id))
+    .map(task => `- [ ] ${task.text} <!-- task:${task.id} -->`);
+
+  if (additions.length > 0) {
+    const separator = current.endsWith('\n') ? '' : '\n';
+    atomicWriteFileSync(targetPath, `${current}${separator}\n## Carried forward from ${fromDateISO}\n${additions.join('\n')}\n`);
+  }
+
+  return tasks;
+}
+
 function loadTemplate(vaultRoot: string, kind: DayFileKind): string {
   const override = join(vaultRoot, '_templates', 'daily', `${kind}.md`);
   if (existsSync(override)) return readFileSync(override, 'utf-8');
   return readFileSync(new URL(`./templates/${kind}.md`, import.meta.url), 'utf-8');
+}
+
+function generateTaskId(value: string): string {
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = ((hash << 5) - hash + value.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash).toString(36);
 }

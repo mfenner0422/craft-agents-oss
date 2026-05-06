@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'bun:test';
-import { ensureDay, listDays } from '../store.ts';
+import { ensureDay, getIncompleteTasks, listDays, pullForwardTasks } from '../store.ts';
 
 const tempDirs: string[] = [];
 
@@ -52,5 +52,23 @@ describe('days store', () => {
     const vaultRoot = tempVault();
     expect(() => ensureDay(vaultRoot, '../bad')).toThrow('Invalid day date');
     expect(() => ensureDay(vaultRoot, '2026-5-6')).toThrow('Invalid day date');
+  });
+
+  it('pulls incomplete tasks forward without duplicating stable ids', () => {
+    const vaultRoot = tempVault();
+    ensureDay(vaultRoot, '2026-05-05');
+    writeFileSync(
+      join(vaultRoot, 'daily', '2026-05-05', 'tasks.md'),
+      '- [ ] Follow up <!-- task:abc -->\n- [x] Done thing <!-- task:def -->\n',
+      'utf-8',
+    );
+
+    expect(getIncompleteTasks(vaultRoot, '2026-05-05')).toEqual([
+      { id: 'abc', text: 'Follow up', line: '- [ ] Follow up <!-- task:abc -->' },
+    ]);
+    pullForwardTasks(vaultRoot, '2026-05-05', '2026-05-06');
+    pullForwardTasks(vaultRoot, '2026-05-05', '2026-05-06');
+    const target = ensureDay(vaultRoot, '2026-05-06').files.tasks;
+    expect(target.match(/task:abc/g)).toHaveLength(1);
   });
 });

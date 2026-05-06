@@ -1,5 +1,5 @@
 import { getWorkspaceOrThrow } from '@craft-agent/server-core/handlers';
-import { assertDateISO, ensureDay, listDays } from '@craft-agent/shared/days';
+import { assertDateISO, ensureDay, getIncompleteTasks, listDays, pullForwardTasks } from '@craft-agent/shared/days';
 import { resolveVaultRoot } from '@craft-agent/shared/vault';
 import { loadWorkspaceConfig } from '@craft-agent/shared/workspaces';
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol';
@@ -18,5 +18,20 @@ export function registerDaysHandlers(server: RpcServer, _deps: HandlerDeps): voi
     const workspace = getWorkspaceOrThrow(workspaceId);
     const config = loadWorkspaceConfig(workspace.rootPath);
     return listDays(resolveVaultRoot(workspace.rootPath, config), limit);
+  });
+
+  server.handle(RPC_CHANNELS.days.INCOMPLETE_TASKS, async (_ctx, workspaceId: string, dateISO: string) => {
+    assertDateISO(dateISO);
+    const workspace = getWorkspaceOrThrow(workspaceId);
+    const config = loadWorkspaceConfig(workspace.rootPath);
+    return getIncompleteTasks(resolveVaultRoot(workspace.rootPath, config), dateISO);
+  });
+
+  server.handle(RPC_CHANNELS.days.PULL_FORWARD, async (_ctx, workspaceId: string, fromDateISO: string, toDateISO: string) => {
+    assertDateISO(fromDateISO);
+    assertDateISO(toDateISO);
+    const workspace = getWorkspaceOrThrow(workspaceId);
+    const config = loadWorkspaceConfig(workspace.rootPath);
+    return pullForwardTasks(resolveVaultRoot(workspace.rootPath, config), fromDateISO, toDateISO);
   });
 }

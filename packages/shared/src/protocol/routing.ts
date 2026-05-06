@@ -289,6 +289,8 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   // days — workspace vault content
   RPC_CHANNELS.days.ENSURE,
   RPC_CHANNELS.days.LIST,
+  RPC_CHANNELS.days.INCOMPLETE_TASKS,
+  RPC_CHANNELS.days.PULL_FORWARD,
 
   // llmConnections — LLM config lives on server running workspace
   RPC_CHANNELS.llmConnections.LIST,

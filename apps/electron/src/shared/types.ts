@@ -437,6 +437,8 @@ export interface ElectronAPI {
   enrichCaptureUrl(url: string): Promise<{ title?: string; description?: string }>
   ensureDay(workspaceId: string, dateISO?: string): Promise<import('@craft-agent/shared/days').DayRecord>
   listDays(workspaceId: string, limit?: number): Promise<string[]>
+  getIncompleteDayTasks(workspaceId: string, dateISO: string): Promise<import('@craft-agent/shared/days').DayTask[]>
+  pullForwardDayTasks(workspaceId: string, fromDateISO: string, toDateISO: string): Promise<import('@craft-agent/shared/days').DayTask[]>
 
   // Folder dialog
   openFolderDialog(): Promise<string | null>
