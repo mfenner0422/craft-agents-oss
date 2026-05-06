@@ -32,6 +32,16 @@ import {
   Bot,
   Info,
 } from "lucide-react"
+import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core"
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
 import { SourceAvatar } from "@/components/ui/source-avatar"
 import { TopBar } from "./TopBar"
@@ -844,6 +854,11 @@ function AppShellContent({
   } = useAutomations(activeWorkspaceId)
   const [captureItems, setCaptureItems] = React.useState<CaptureItem[]>([])
   const [days, setDays] = React.useState<string[]>([])
+  const [draggedSessionTitle, setDraggedSessionTitle] = React.useState<string | null>(null)
+  const sessionDndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor),
+  )
 
   React.useEffect(() => {
     if (!activeWorkspaceId) {
@@ -2221,8 +2236,31 @@ function AppShellContent({
     })
   }, [sessionFilter, labelCounts, activeWorkspace?.id, handleLabelClick, isExpanded, toggleExpanded, openConfigureLabels, handleAddLabel, handleDeleteLabel])
 
+  const handleSessionDragStart = useCallback((event: DragStartEvent) => {
+    const data = event.active.data.current
+    setDraggedSessionTitle(data?.type === 'session' && typeof data.title === 'string' ? data.title : null)
+  }, [])
+
+  const handleSessionDragEnd = useCallback((event: DragEndEvent) => {
+    const activeData = event.active.data.current
+    const overData = event.over?.data.current
+    setDraggedSessionTitle(null)
+    if (activeData?.type !== 'session' || overData?.type !== 'session-target') return
+    const sessionId = typeof activeData.sessionId === 'string' ? activeData.sessionId : null
+    const onSessionDrop = overData.onSessionDrop
+    if (!sessionId || typeof onSessionDrop !== 'function') return
+    if (!sessionMetaMap.has(sessionId)) return
+    onSessionDrop(sessionId)
+  }, [sessionMetaMap])
+
   return (
     <AppShellProvider value={appShellContextValue}>
+      <DndContext
+        sensors={sessionDndSensors}
+        onDragStart={handleSessionDragStart}
+        onDragCancel={() => setDraggedSessionTitle(null)}
+        onDragEnd={handleSessionDragEnd}
+      >
         {/* === TOP BAR === */}
         <TopBar
           workspaces={workspaces}
@@ -3607,6 +3645,14 @@ function AppShellContent({
           Mounted here so they survive context-menu / dropdown close. */}
       <MessagingDialogHost />
 
+      <DragOverlay>
+        {draggedSessionTitle ? (
+          <div className="max-w-[280px] truncate rounded-md border border-border bg-background px-3 py-2 text-[13px] shadow-modal-small">
+            {draggedSessionTitle}
+          </div>
+        ) : null}
+      </DragOverlay>
+      </DndContext>
     </AppShellProvider>
   )
 }

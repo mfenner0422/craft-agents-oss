@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react"
 import * as React from "react"
 import { AnimatePresence, motion, type Variants } from "motion/react"
 import { ChevronRight } from "lucide-react"
+import { useDroppable } from "@dnd-kit/core"
 
 import { cn } from "@/lib/utils"
 import {
@@ -470,21 +471,11 @@ interface SidebarButtonProps {
 // and pass props like data-state="open" directly onto this button element.
 const SidebarButton = React.forwardRef<HTMLButtonElement, SidebarButtonProps & React.ButtonHTMLAttributes<HTMLButtonElement>>(
   ({ link, itemProps, isOverlay, className: extraClassName, ...radixProps }, forwardedRef) => {
-    const handleDragOver = React.useCallback((event: React.DragEvent<HTMLButtonElement>) => {
-      if (!link.onSessionDrop || isOverlay) return
-      event.preventDefault()
-      event.dataTransfer.dropEffect = 'move'
-    }, [isOverlay, link.onSessionDrop])
-
-    const handleDrop = React.useCallback((event: React.DragEvent<HTMLButtonElement>) => {
-      if (!link.onSessionDrop || isOverlay) return
-      const sessionId =
-        event.dataTransfer.getData('application/x-craft-session-id') ||
-        event.dataTransfer.getData('text/plain')
-      if (!sessionId) return
-      event.preventDefault()
-      link.onSessionDrop(sessionId)
-    }, [isOverlay, link])
+    const droppable = useDroppable({
+      id: `session-target:${link.id}`,
+      disabled: isOverlay || !link.onSessionDrop,
+      data: { type: 'session-target', onSessionDrop: link.onSessionDrop },
+    })
 
     return (
       <button
@@ -500,10 +491,9 @@ const SidebarButton = React.forwardRef<HTMLButtonElement, SidebarButtonProps & R
           if (typeof forwardedRef === 'function') forwardedRef(el)
           else if (forwardedRef) forwardedRef.current = el
           if (!isOverlay && itemProps?.ref) itemProps.ref(el)
+          droppable.setNodeRef(el)
         }}
         onClick={isOverlay ? undefined : link.onClick}
-        onDragOver={handleDragOver}
-        onDrop={handleDrop}
         data-tutorial={link.dataTutorial}
         className={cn(
           "group flex w-full items-center gap-2 rounded-[6px] text-[13px] select-none outline-none",
@@ -515,6 +505,7 @@ const SidebarButton = React.forwardRef<HTMLButtonElement, SidebarButtonProps & R
             ? "bg-foreground/[0.07]"
             // Highlight on hover, context menu open (data-state), or EditPopover active (data-edit-active)
             : "hover:bg-sidebar-hover data-[state=open]:bg-sidebar-hover data-[edit-active=true]:bg-sidebar-hover",
+          droppable.isOver && link.onSessionDrop && "bg-foreground/[0.10] ring-1 ring-inset ring-foreground/20",
           extraClassName,
         )}
       >
