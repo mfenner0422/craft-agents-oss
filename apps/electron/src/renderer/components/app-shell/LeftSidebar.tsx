@@ -79,6 +79,8 @@ export interface LinkItem {
   contextMenu?: SidebarContextMenuConfig
   // Drag-and-drop: flat list reorder (e.g., statuses)
   sortable?: SortableConfig
+  // Drag-and-drop: session drop target (e.g., status, flagged, archived)
+  onSessionDrop?: (sessionId: string) => void
   // Optional element rendered after the title (e.g., label type icon), revealed on hover
   afterTitle?: React.ReactNode
 }
@@ -468,6 +470,22 @@ interface SidebarButtonProps {
 // and pass props like data-state="open" directly onto this button element.
 const SidebarButton = React.forwardRef<HTMLButtonElement, SidebarButtonProps & React.ButtonHTMLAttributes<HTMLButtonElement>>(
   ({ link, itemProps, isOverlay, className: extraClassName, ...radixProps }, forwardedRef) => {
+    const handleDragOver = React.useCallback((event: React.DragEvent<HTMLButtonElement>) => {
+      if (!link.onSessionDrop || isOverlay) return
+      event.preventDefault()
+      event.dataTransfer.dropEffect = 'move'
+    }, [isOverlay, link.onSessionDrop])
+
+    const handleDrop = React.useCallback((event: React.DragEvent<HTMLButtonElement>) => {
+      if (!link.onSessionDrop || isOverlay) return
+      const sessionId =
+        event.dataTransfer.getData('application/x-craft-session-id') ||
+        event.dataTransfer.getData('text/plain')
+      if (!sessionId) return
+      event.preventDefault()
+      link.onSessionDrop(sessionId)
+    }, [isOverlay, link])
+
     return (
       <button
         {...(isOverlay ? {} : (() => {
@@ -484,6 +502,8 @@ const SidebarButton = React.forwardRef<HTMLButtonElement, SidebarButtonProps & R
           if (!isOverlay && itemProps?.ref) itemProps.ref(el)
         }}
         onClick={isOverlay ? undefined : link.onClick}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
         data-tutorial={link.dataTutorial}
         className={cn(
           "group flex w-full items-center gap-2 rounded-[6px] text-[13px] select-none outline-none",

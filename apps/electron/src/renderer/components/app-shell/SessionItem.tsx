@@ -20,6 +20,8 @@ import { messagingBindingsBySessionAtom } from "@/atoms/messaging"
 import { useAtomValue } from "jotai"
 import { extractLabelId } from "@craft-agent/shared/labels"
 
+const SESSION_DRAG_MIME = 'application/x-craft-session-id'
+
 const PLATFORM_PILL: Record<'telegram' | 'whatsapp', { label: string; colorClass: string }> = {
   telegram: {
     label: 'Telegram',
@@ -113,6 +115,12 @@ export function SessionItem({
       onMouseDown={handleClick}
       buttonProps={{
         ...itemProps,
+        draggable: true,
+        onDragStart: (e: React.DragEvent) => {
+          e.dataTransfer.effectAllowed = 'move'
+          e.dataTransfer.setData(SESSION_DRAG_MIME, item.id)
+          e.dataTransfer.setData('text/plain', item.id)
+        },
         onKeyDown: (e: React.KeyboardEvent) => {
           ;(itemProps as { onKeyDown: (event: React.KeyboardEvent) => void }).onKeyDown(e)
           ctx.onKeyDown(e, item)

@@ -2355,6 +2355,7 @@ function AppShellContent({
                           iconColorable: state.iconColorable,
                           variant: (sessionFilter?.kind === 'state' && sessionFilter.stateId === state.id ? "default" : "ghost") as "default" | "ghost",
                           onClick: () => handleSessionStatusClick(state.id),
+                          onSessionDrop: (sessionId: string) => onSessionStatusChange(sessionId, state.id),
                           contextMenu: {
                             type: 'status' as const,
                             statusId: state.id,
@@ -2371,6 +2372,7 @@ function AppShellContent({
                           icon: <Flag className="h-3.5 w-3.5" />,
                           variant: (sessionFilter?.kind === 'flagged' ? "default" : "ghost") as "default" | "ghost",
                           onClick: handleFlaggedClick,
+                          onSessionDrop: (sessionId: string) => onFlagSession(sessionId),
                         },
                         // Archived (trailing, non-sortable)
                         {
@@ -2380,6 +2382,7 @@ function AppShellContent({
                           icon: Archive,
                           variant: (sessionFilter?.kind === 'archived' ? "default" : "ghost") as "default" | "ghost",
                           onClick: handleArchivedClick,
+                          onSessionDrop: (sessionId: string) => onArchiveSession(sessionId),
                         },
                       ],
                     },
