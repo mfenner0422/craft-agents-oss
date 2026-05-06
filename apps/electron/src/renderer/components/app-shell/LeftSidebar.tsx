@@ -99,6 +99,7 @@ export const isSeparatorItem = (item: SidebarItem): item is SeparatorItem =>
 interface LeftSidebarProps {
   isCollapsed: boolean
   links: SidebarItem[]
+  sessionDragActive?: boolean
   /** Get props for each item (from unified sidebar navigation) */
   getItemProps?: (id: string) => {
     tabIndex: number
@@ -168,7 +169,7 @@ const itemVariants: Variants = {
  * - Uses @dnd-kit with DragOverlay portaled to document.body (no clipping)
  * - Two-phase drop animation: overlay fades out, ghost fades in
  */
-export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, isNested }: LeftSidebarProps) {
+export function LeftSidebar({ links, isCollapsed, sessionDragActive, getItemProps, focusedItemId, isNested }: LeftSidebarProps) {
   // For nested sidebars, wrap in motion container for stagger effect
   const NavWrapper = isNested ? motion.nav : 'nav'
   const navProps = isNested ? {
@@ -220,7 +221,7 @@ export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, i
 
           // Determine which expanded content to render (sortable vs regular)
           const expandedContent = link.expandable && link.items && link.expanded
-            ? renderExpandedContent(link, getItemProps, focusedItemId, isNested)
+            ? renderExpandedContent(link, getItemProps, focusedItemId, isNested, sessionDragActive)
             : null
 
           // Wrap with context menu if configured, scoped to button only.
@@ -303,10 +304,11 @@ function renderExpandedContent(
   link: LinkItem,
   getItemProps: LeftSidebarProps['getItemProps'],
   focusedItemId: string | null | undefined,
-  isNested: boolean | undefined
+  isNested: boolean | undefined,
+  sessionDragActive: boolean | undefined
 ): React.ReactNode {
   // Flat sortable (e.g., statuses): wrap items in SortableList
-  if (link.sortable && link.items) {
+  if (link.sortable && link.items && !sessionDragActive) {
     // Split at first separator: items before are sortable, items after are trailing (non-sortable)
     const separatorIndex = link.items.findIndex(isSeparatorItem)
     const sortableItems = separatorIndex >= 0 ? link.items.slice(0, separatorIndex) : link.items
@@ -330,6 +332,7 @@ function renderExpandedContent(
     <LeftSidebar
       isCollapsed={false}
       isNested={true}
+      sessionDragActive={sessionDragActive}
       getItemProps={getItemProps}
       focusedItemId={focusedItemId}
       links={link.items!}

@@ -2339,6 +2339,7 @@ function AppShellContent({
                 <div className="flex-1 overflow-y-auto min-h-0 mask-fade-bottom pb-4">
                 <LeftSidebar
                   isCollapsed={false}
+                  sessionDragActive={!!draggedSessionTitle}
                   getItemProps={getSidebarItemProps}
                   focusedItemId={focusedSidebarItemId}
                   links={[
