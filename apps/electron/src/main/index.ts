@@ -707,20 +707,21 @@ app.whenReady().then(async () => {
 
       // Capture module-level references for before-quit cleanup and deep-link handlers
       sessionManager = instance.sessionManager
-      const [{ CaptureManager }, { loadPreferences }, { setCaptureHotkeyBinder }] = await Promise.all([
+      const [{ CaptureManager }, { openCaptureWindow }, { DEFAULT_CAPTURE_HOTKEY, loadPreferences }, { setCaptureHotkeyBinder }] = await Promise.all([
         import('./capture-manager'),
+        import('./capture-window'),
         import('@craft-agent/shared/config/preferences'),
         import('./handlers/settings'),
       ])
       captureManager = new CaptureManager({
-        initialHotkey: loadPreferences().captureHotkey ?? 'CommandOrControl+Alt+Space',
-        onCapture: () => {
-          const focused = BrowserWindow.getFocusedWindow()
-          focused?.webContents.send('capture:open')
-        },
+        initialHotkey: loadPreferences().captureHotkey ?? DEFAULT_CAPTURE_HOTKEY,
+        getWorkspaces: () => sessionManager?.getWorkspaces() ?? [],
+        getWorkspaceForWindow: (webContentsId) => windowManager?.getWorkspaceForWindow(webContentsId) ?? null,
+        openCaptureWindow,
       })
       captureManager.start()
       setCaptureHotkeyBinder((accelerator) => captureManager?.setHotkey(accelerator) ?? { ok: false, error: 'unavailable' })
+      sessionManager.setOnWorkspaceConfigChange(() => captureManager?.refreshTargetWorkspaces())
       oauthFlowStore = instance.oauthFlowStore
       moduleSink = instance.wsServer.push.bind(instance.wsServer)
       moduleClientResolver = resolveClientId

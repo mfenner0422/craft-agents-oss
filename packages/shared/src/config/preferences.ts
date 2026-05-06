@@ -40,6 +40,7 @@ export interface UserPreferences {
 }
 
 const PREFERENCES_FILE = join(CONFIG_DIR, 'preferences.json');
+export const DEFAULT_CAPTURE_HOTKEY = 'CommandOrControl+Alt+Space';
 export const UI_ONLY_PREFERENCE_KEYS = new Set<keyof UserPreferences>(['captureHotkey']);
 
 export function loadPreferences(): UserPreferences {

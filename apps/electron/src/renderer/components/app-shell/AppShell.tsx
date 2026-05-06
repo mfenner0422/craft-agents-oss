@@ -2346,6 +2346,14 @@ function AppShellContent({
                         },
                       ],
                     },
+                    {
+                      id: "nav:capture",
+                      title: t("sidebar.capture"),
+                      label: captureItems.length > 0 ? String(captureItems.length) : undefined,
+                      icon: Inbox,
+                      variant: isCaptureNavigation(navState) ? "default" : "ghost",
+                      onClick: handleCaptureClick,
+                    },
                     // Labels: navigable header (shows all labeled sessions) + hierarchical tree (drag-and-drop reorder + re-parent)
                     {
                       id: "nav:labels",
@@ -2424,14 +2432,6 @@ function AppShellContent({
                           },
                         },
                       ],
-                    },
-                    {
-                      id: "nav:capture",
-                      title: t("sidebar.capture"),
-                      label: captureItems.length > 0 ? String(captureItems.length) : undefined,
-                      icon: Inbox,
-                      variant: isCaptureNavigation(navState) ? "default" : "ghost",
-                      onClick: handleCaptureClick,
                     },
                     {
                       id: "nav:skills",

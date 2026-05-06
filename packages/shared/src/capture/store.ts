@@ -46,6 +46,23 @@ export function captureItem(input: CaptureItemInput): CaptureItem {
     tags,
   }, input.body);
 
+  if (url) {
+    void enrichUrl(url).then(meta => {
+      if (!meta.title && !meta.description) return;
+      writeMarkdown(filePath, {
+        id,
+        captured_at: capturedAt,
+        source: input.source,
+        url,
+        title: title ?? meta.title,
+        ...(meta.description ? { description: meta.description } : {}),
+        tags,
+      }, input.body);
+    }).catch(() => {
+      // URL enrichment is best-effort; capture creation has already succeeded.
+    });
+  }
+
   return {
     id,
     filePath,
@@ -82,11 +99,21 @@ export function listInboxItems(vaultRoot: string, limit = 100): CaptureItem[] {
 }
 
 export async function enrichUrl(url: string): Promise<{ title?: string; description?: string }> {
+  const parsed = new URL(url);
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('Only http and https URLs can be enriched');
+  }
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5_000);
   try {
-    const response = await fetch(url, { signal: controller.signal });
-    const html = await response.text();
+    const response = await fetch(parsed.toString(), {
+      signal: controller.signal,
+      headers: { Accept: 'text/html' },
+    });
+    const contentType = response.headers.get('content-type') ?? '';
+    if (!contentType.toLowerCase().includes('text/html')) return {};
+    const html = await readTextWithLimit(response, 256 * 1024);
     return {
       title: matchMeta(html, /<title[^>]*>([^<]*)<\/title>/i),
       description: matchMeta(html, /<meta\s+name=["']description["']\s+content=["']([^"']*)["'][^>]*>/i),
@@ -94,6 +121,36 @@ export async function enrichUrl(url: string): Promise<{ title?: string; descript
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function readTextWithLimit(response: Response, limitBytes: number): Promise<string> {
+  const reader = response.body?.getReader();
+  if (!reader) return response.text();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (!value) continue;
+    total += value.byteLength;
+    if (total > limitBytes) {
+      chunks.push(value.slice(0, Math.max(0, value.byteLength - (total - limitBytes))));
+      break;
+    }
+    chunks.push(value);
+  }
+  return new TextDecoder().decode(concatChunks(chunks));
+}
+
+function concatChunks(chunks: Uint8Array[]): Uint8Array {
+  const total = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+  const output = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    output.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return output;
 }
 
 function safeHostname(url: string): string {

@@ -1,8 +1,8 @@
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from './handler-deps'
+import { DEFAULT_CAPTURE_HOTKEY } from '@craft-agent/shared/config/preferences'
 
-const DEFAULT_CAPTURE_HOTKEY = 'CommandOrControl+Alt+Space'
 let captureHotkeyBinder: ((accelerator: string) => { ok: boolean; error?: string }) | null = null
 
 export function setCaptureHotkeyBinder(binder: ((accelerator: string) => { ok: boolean; error?: string }) | null): void {
