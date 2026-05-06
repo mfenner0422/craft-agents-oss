@@ -1381,6 +1381,7 @@ export class SessionManager implements ISessionManager {
               sessionId: result.status === 'fulfilled' ? result.value.sessionId : undefined,
               prompt: pending.prompt,
               error: result.status === 'rejected' ? String(result.reason) : undefined,
+              recoveredAt: pending.recoveredAt,
             })
 
             appendAutomationHistoryEntry(workspaceRootPath, entry).catch(e => sessionLog.warn('[Automations] Failed to write history:', e))
@@ -7301,5 +7302,11 @@ export class SessionManager implements ISessionManager {
     }
 
     sessionLog.info('Cleanup complete')
+  }
+
+  public notifyAutomationResume(): void {
+    for (const automationSystem of this.automationSystems.values()) {
+      automationSystem.notifyResume();
+    }
   }
 }

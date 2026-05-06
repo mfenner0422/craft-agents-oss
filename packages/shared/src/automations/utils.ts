@@ -181,10 +181,29 @@ export function matcherMatchesWithContext(
   return true;
 }
 
+function getSchedulerReferenceDate(payload: Record<string, unknown>): Date | undefined {
+  const scheduledAt = payload.scheduledAt;
+  if (typeof scheduledAt !== 'string') return undefined;
+  const parsed = new Date(scheduledAt);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+}
+
 /**
  * App-event adapter for canonical matcher evaluation.
  */
 export function matcherMatches(matcher: AutomationMatcher, event: AutomationEvent, data: Record<string, unknown>): boolean {
+  if (matcher.enabled === false) return false;
+  if (event === 'SchedulerTick') {
+    const recoveredMatcherId = data.recoveredMatcherId;
+    if (typeof recoveredMatcherId === 'string' && matcher.id !== recoveredMatcherId) return false;
+    if (!matcher.cron || !matchesCron(matcher.cron, matcher.timezone, getSchedulerReferenceDate(data))) return false;
+    if (!matcher.conditions?.length) return true;
+    return evaluateConditions(matcher.conditions, {
+      payload: data,
+      matcherTimezone: matcher.timezone,
+    });
+  }
+
   return matcherMatchesWithContext(matcher, event, {
     matchValue: getMatchValue(event, data),
     payload: data,
@@ -219,7 +238,7 @@ export function cleanEnv(): Record<string, string> {
 }
 
 /** Keys skipped when iterating payload fields for env vars */
-const PAYLOAD_SKIP_KEYS = new Set(['sessionId', 'sessionName', 'workspaceId', 'timestamp']);
+const PAYLOAD_SKIP_KEYS = new Set(['sessionId', 'sessionName', 'workspaceId', 'timestamp', 'recoveredMatcherId']);
 
 /**
  * Build the base CRAFT_* environment variables shared by both prompt and webhook actions.
@@ -245,8 +264,13 @@ function buildBaseEventEnv(event: AutomationEvent, payload: BaseEventPayload): R
 
   // Local time for scheduler events
   if (event === 'SchedulerTick') {
-    const now = new Date();
-    env.CRAFT_LOCAL_TIME = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+    const scheduledAt = (payload as unknown as Record<string, unknown>).scheduledAt;
+    const date = typeof scheduledAt === 'string' ? new Date(scheduledAt) : new Date();
+    const now = Number.isNaN(date.getTime()) ? new Date() : date;
+    const localTime = (payload as unknown as Record<string, unknown>).localTime;
+    env.CRAFT_LOCAL_TIME = typeof localTime === 'string'
+      ? localTime
+      : now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
     env.CRAFT_LOCAL_DATE = now.toISOString().split('T')[0]!;
   }
 

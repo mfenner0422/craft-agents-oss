@@ -6,7 +6,7 @@
  * is actively processing.
  */
 
-import { powerSaveBlocker } from 'electron'
+import { powerMonitor, powerSaveBlocker } from 'electron'
 import { mainLog } from './logger'
 
 // Track the current power blocker ID (null when not blocking)
@@ -17,14 +17,18 @@ let activeSessionCount = 0
 
 // Cache the setting value to avoid repeated config reads
 let settingEnabled = false
+let onResumeAutomation: (() => void) | null = null
 
 /**
  * Initialize the power manager by loading the current setting.
  * Call this on app startup.
  */
-export async function initPowerManager(): Promise<void> {
+export async function initPowerManager(onResume?: () => void): Promise<void> {
   const { getKeepAwakeWhileRunning } = await import('@craft-agent/shared/config/storage')
   settingEnabled = getKeepAwakeWhileRunning()
+  onResumeAutomation = onResume ?? null
+  powerMonitor.on('resume', () => { onResumeAutomation?.() })
+  powerMonitor.on('unlock-screen', () => { onResumeAutomation?.() })
   mainLog.info('[power] Power manager initialized', { settingEnabled })
 }
 

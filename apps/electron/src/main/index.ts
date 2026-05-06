@@ -1038,7 +1038,7 @@ app.whenReady().then(async () => {
     // Non-critical — powerSaveBlocker may not work on headless/xvfb setups
     try {
       const { initPowerManager } = await import('./power-manager')
-      await initPowerManager()
+      await initPowerManager(() => { sessionManager?.notifyAutomationResume() })
     } catch (err) {
       mainLog.warn('[power] Power manager init failed (non-critical):', err instanceof Error ? err.message : err)
     }

@@ -83,6 +83,9 @@ export class PromptHandler implements AutomationHandler {
 
     // Process prompts per matcher
     const pendingPrompts: PendingPrompt[] = [];
+    const recoveredAt = 'recoveredAt' in payload && typeof payload.recoveredAt === 'string'
+      ? payload.recoveredAt
+      : undefined;
 
     for (const { matcherId, automationName, prompts } of matcherPrompts) {
       for (const { prompt, labels, permissionMode } of prompts) {
@@ -105,6 +108,7 @@ export class PromptHandler implements AutomationHandler {
           permissionMode,
           llmConnection: prompt.llmConnection,
           model: prompt.model,
+          recoveredAt,
         });
       }
 

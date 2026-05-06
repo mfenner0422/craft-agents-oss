@@ -155,6 +155,9 @@ export class WebhookHandler implements AutomationHandler {
 
     // Build environment variables for URL/body expansion (webhook-safe: no process.env leak)
     const env = buildWebhookEnv(event, payload);
+    const recoveredAt = 'recoveredAt' in payload && typeof payload.recoveredAt === 'string'
+      ? payload.recoveredAt
+      : undefined;
 
     // Apply per-endpoint rate limiting before execution.
     // Resolve URLs first (expand env vars) so rate limiting works on actual endpoints.
@@ -227,6 +230,7 @@ export class WebhookHandler implements AutomationHandler {
         attempts: result.attempts,
         error: result.error,
         responseBody: result.responseBody,
+        recoveredAt,
       });
       try {
         await appendAutomationHistoryEntry(this.options.workspaceRootPath, entry);
