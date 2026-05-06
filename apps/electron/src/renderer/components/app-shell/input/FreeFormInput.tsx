@@ -916,6 +916,11 @@ export function FreeFormInput({
     else if (commandId === 'ask') onPermissionModeChange?.('ask')
     else if (commandId === 'allow-all') onPermissionModeChange?.('allow-all')
     else if (commandId === 'compact' && !isProcessing) onSubmit('/compact', undefined)
+    else if (commandId === 'task' && !isProcessing) onSubmit('Add this to today\'s task list.', undefined)
+    else if (commandId === 'scratch' && !isProcessing) onSubmit('Add this to today\'s scratch notes.', undefined)
+    else if (commandId === 'journal' && !isProcessing) onSubmit('Add this to today\'s journal.', undefined)
+    else if (commandId === 'today' && !isProcessing) onSubmit('Review today\'s tasks, scratch notes, and journal.', undefined)
+    else if (commandId === 'capture' && !isProcessing) onSubmit('Save this to the capture inbox.', undefined)
   }, [onPermissionModeChange, isProcessing, onSubmit])
 
   // Handle folder selection from slash command menu

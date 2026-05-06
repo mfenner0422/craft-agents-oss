@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { useTranslation } from "react-i18next"
 import { Command as CommandPrimitive } from 'cmdk'
-import { Check, Minimize2 } from 'lucide-react'
+import { BookOpen, Check, ListTodo, Minimize2, NotebookPen, SquarePen } from 'lucide-react'
 import { Icon_Folder } from '@craft-agent/ui'
 import { cn } from '@/lib/utils'
 import { PERMISSION_MODE_CONFIG, PERMISSION_MODE_ORDER, type PermissionMode } from '@craft-agent/shared/agent/modes'
@@ -10,7 +10,7 @@ import { PERMISSION_MODE_CONFIG, PERMISSION_MODE_ORDER, type PermissionMode } fr
 // Types
 // ============================================================================
 
-export type SlashCommandId = PermissionMode | 'compact'
+export type SlashCommandId = PermissionMode | 'compact' | 'task' | 'scratch' | 'journal' | 'today' | 'capture'
 
 /** Union type for all item types in the slash menu */
 export type SlashItemType = 'command' | 'folder'
@@ -97,9 +97,43 @@ const compactCommand: SlashCommand = {
   icon: <Minimize2 className={MENU_ICON_SIZE} />,
 }
 
+const dayCommands: SlashCommand[] = [
+  {
+    id: 'task',
+    label: 'Task',
+    description: 'Add a task to today',
+    icon: <ListTodo className={MENU_ICON_SIZE} />,
+  },
+  {
+    id: 'scratch',
+    label: 'Scratch',
+    description: 'Add a scratch note to today',
+    icon: <SquarePen className={MENU_ICON_SIZE} />,
+  },
+  {
+    id: 'journal',
+    label: 'Journal',
+    description: 'Add a journal note to today',
+    icon: <NotebookPen className={MENU_ICON_SIZE} />,
+  },
+  {
+    id: 'today',
+    label: 'Today',
+    description: 'Review today',
+    icon: <BookOpen className={MENU_ICON_SIZE} />,
+  },
+  {
+    id: 'capture',
+    label: 'Capture',
+    description: 'Save a capture to the inbox',
+    icon: <SquarePen className={MENU_ICON_SIZE} />,
+  },
+]
+
 export const DEFAULT_SLASH_COMMANDS: SlashCommand[] = [
   ...permissionModeCommands,
   compactCommand,
+  ...dayCommands,
 ]
 
 export const DEFAULT_SLASH_COMMAND_GROUPS: CommandGroup[] = [
@@ -578,7 +612,7 @@ export function useInlineSlashCommand({
     result.push({
       id: 'commands',
       label: 'Commands',
-      items: [compactCommand],
+      items: [compactCommand, ...dayCommands],
     })
 
     // Recent folders section - sorted alphabetically by folder name, show all
