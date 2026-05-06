@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 
 export type DayFileKind = 'tasks' | 'scratch' | 'journal';
+export type SharedTaskListKind = 'next' | 'someday';
 export const DAY_ISO_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 export function assertDateISO(dateISO: string): void {
@@ -16,4 +17,8 @@ export function getDayDir(vaultRoot: string, dateISO: string): string {
 
 export function getDayFilePath(vaultRoot: string, dateISO: string, kind: DayFileKind): string {
   return join(getDayDir(vaultRoot, dateISO), `${kind}.md`);
+}
+
+export function getSharedTaskListPath(vaultRoot: string, kind: SharedTaskListKind): string {
+  return join(vaultRoot, 'daily', `${kind}.md`);
 }

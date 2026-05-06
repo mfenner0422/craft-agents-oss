@@ -1,8 +1,22 @@
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'bun:test';
-import { ensureDay, getIncompleteTasks, listDays, pullForwardTasks, readDay, updateDayFile } from '../store.ts';
+import {
+  ensureBoard,
+  ensureDay,
+  getIncompleteTasks,
+  listDays,
+  parseTaskList,
+  pullForwardTasks,
+  readDay,
+  readManagedMarkdownBody,
+  readSharedTaskList,
+  serializeTaskList,
+  updateDayFile,
+  updateTaskLists,
+  writeSharedTaskList,
+} from '../store.ts';
 import { addDays, formatLocalDateISO, parseDateISO } from '../date.ts';
 
 const tempDirs: string[] = [];
@@ -29,14 +43,15 @@ describe('days store', () => {
     const vaultRoot = tempVault();
     const day = ensureDay(vaultRoot, '2026-05-06');
     expect(Object.keys(day.files).sort()).toEqual(['journal', 'scratch', 'tasks']);
+    expect(day.files.tasks).toStartWith('# Today');
     expect(listDays(vaultRoot)).toEqual(['2026-05-06']);
   });
 
   it('uses vault template overrides', () => {
     const vaultRoot = tempVault();
     mkdirSync(join(vaultRoot, '_templates', 'daily'), { recursive: true });
-    writeFileSync(join(vaultRoot, '_templates', 'daily', 'tasks.md'), '# Custom tasks\n', 'utf-8');
-    expect(ensureDay(vaultRoot, '2026-05-06').files.tasks).toBe('# Custom tasks\n');
+    writeFileSync(join(vaultRoot, '_templates', 'daily', 'tasks.md'), '# Custom tasks\n\n- [ ] Custom\n', 'utf-8');
+    expect(ensureDay(vaultRoot, '2026-05-06').files.tasks).toBe('# Today\n\n- [ ] Custom\n');
   });
 
   it('is idempotent when called repeatedly', () => {
@@ -45,7 +60,8 @@ describe('days store', () => {
     writeFileSync(join(vaultRoot, 'daily', '2026-05-06', 'scratch.md'), 'keep me\n', 'utf-8');
     const second = ensureDay(vaultRoot, '2026-05-06');
     expect(second.files.tasks).toBe(first.files.tasks);
-    expect(second.files.scratch).toBe('keep me\n');
+    expect(second.files.scratch).toBe('# Scratch\n\nkeep me\n');
+    expect(second.bodies.scratch).toBe('keep me\n');
   });
 
   it('reads existing partial days without creating missing files', () => {
@@ -54,8 +70,9 @@ describe('days store', () => {
     mkdirSync(join(vaultRoot, 'daily', '2026-05-06'), { recursive: true });
     writeFileSync(join(vaultRoot, 'daily', '2026-05-06', 'scratch.md'), 'existing scratch\n', 'utf-8');
     const day = readDay(vaultRoot, '2026-05-06');
-    expect(day?.files.scratch).toBe('existing scratch\n');
-    expect(day?.files.tasks).toContain('# Tasks');
+    expect(day?.files.scratch).toBe('# Scratch\n\nexisting scratch\n');
+    expect(day?.bodies.scratch).toBe('existing scratch\n');
+    expect(day?.files.tasks).toContain('# Today');
   });
 
   it('sorts days descending and respects the limit', () => {
@@ -82,7 +99,7 @@ describe('days store', () => {
     );
 
     expect(getIncompleteTasks(vaultRoot, '2026-05-05')).toEqual([
-      { id: 'abc', text: 'Follow up', line: '- [ ] Follow up <!-- task:abc -->' },
+      { id: 'abc', text: 'Follow up', status: 'todo', line: '- [ ] Follow up <!-- task:abc -->' },
     ]);
     pullForwardTasks(vaultRoot, '2026-05-05', '2026-05-06');
     pullForwardTasks(vaultRoot, '2026-05-05', '2026-05-06');
@@ -92,7 +109,74 @@ describe('days store', () => {
 
   it('updates an individual day file', () => {
     const vaultRoot = tempVault();
-    updateDayFile(vaultRoot, '2026-05-06', 'journal', '# Updated\n');
-    expect(ensureDay(vaultRoot, '2026-05-06').files.journal).toBe('# Updated\n');
+    updateDayFile(vaultRoot, '2026-05-06', 'journal', '# Updated\n\nBody\n');
+    expect(ensureDay(vaultRoot, '2026-05-06').files.journal).toBe('# Journal\n\nBody\n');
+  });
+
+  it('reads and writes managed title bodies without duplicating the H1', () => {
+    const vaultRoot = tempVault();
+    updateDayFile(vaultRoot, '2026-05-06', 'scratch', 'Body\n');
+    updateDayFile(vaultRoot, '2026-05-06', 'scratch', '# Scratch\n\nBody 2\n');
+    const content = readFileSync(join(vaultRoot, 'daily', '2026-05-06', 'scratch.md'), 'utf-8');
+    expect(content).toBe('# Scratch\n\nBody 2\n');
+    expect(readManagedMarkdownBody(content)).toBe('Body 2\n');
+  });
+
+  it('parses and serializes all task statuses with stable ids', () => {
+    const tasks = parseTaskList([
+      '- [ ] Todo <!-- task:a -->',
+      '- [/] Doing <!-- task:b -->',
+      '- [>] Delegated <!-- task:c -->',
+      '- [x] Done <!-- task:d -->',
+      '- [-] Canceled <!-- task:e -->',
+    ].join('\n'));
+    expect(tasks.map(task => task.status)).toEqual(['todo', 'in_progress', 'delegated', 'completed', 'canceled']);
+    expect(serializeTaskList(tasks)).toContain('- [>] Delegated <!-- task:c -->');
+  });
+
+  it('reads and writes shared Next and Someday lists', () => {
+    const vaultRoot = tempVault();
+    writeSharedTaskList(vaultRoot, 'next', [{ id: 'n1', text: 'Queued', status: 'todo' }]);
+    writeSharedTaskList(vaultRoot, 'someday', [{ id: 's1', text: 'Later', status: 'delegated' }]);
+    expect(readSharedTaskList(vaultRoot, 'next')).toEqual([
+      { id: 'n1', text: 'Queued', status: 'todo', line: '- [ ] Queued <!-- task:n1 -->' },
+    ]);
+    expect(readFileSync(join(vaultRoot, 'daily', 'someday.md'), 'utf-8')).toBe('# Someday\n\n- [>] Later <!-- task:s1 -->\n');
+  });
+
+  it('rewrites legacy daily checklist into managed Today format on board save', () => {
+    const vaultRoot = tempVault();
+    mkdirSync(join(vaultRoot, 'daily', '2026-05-06'), { recursive: true });
+    writeFileSync(join(vaultRoot, 'daily', '2026-05-06', 'tasks.md'), '# Tasks\n\n- [ ] Legacy <!-- task:old -->\n', 'utf-8');
+    const board = ensureBoard(vaultRoot, '2026-05-06');
+    updateTaskLists(vaultRoot, '2026-05-06', board.tasks);
+    expect(readFileSync(join(vaultRoot, 'daily', '2026-05-06', 'tasks.md'), 'utf-8')).toBe('# Today\n\n- [ ] Legacy <!-- task:old -->\n');
+  });
+
+  it('carries forward only active yesterday Today tasks', () => {
+    const vaultRoot = tempVault();
+    ensureDay(vaultRoot, '2026-05-05');
+    writeFileSync(
+      join(vaultRoot, 'daily', '2026-05-05', 'tasks.md'),
+      [
+        '# Today',
+        '',
+        '- [ ] Todo <!-- task:a -->',
+        '- [/] Doing <!-- task:b -->',
+        '- [>] Waiting <!-- task:c -->',
+        '- [x] Done <!-- task:d -->',
+        '- [-] Canceled <!-- task:e -->',
+      ].join('\n'),
+      'utf-8',
+    );
+    writeSharedTaskList(vaultRoot, 'next', [{ id: 'n1', text: 'Not carried', status: 'todo' }]);
+    pullForwardTasks(vaultRoot, '2026-05-05', '2026-05-06');
+    const target = readFileSync(join(vaultRoot, 'daily', '2026-05-06', 'tasks.md'), 'utf-8');
+    expect(target).toContain('task:a');
+    expect(target).toContain('task:b');
+    expect(target).toContain('task:c');
+    expect(target).not.toContain('task:d');
+    expect(target).not.toContain('task:e');
+    expect(target).not.toContain('task:n1');
   });
 });

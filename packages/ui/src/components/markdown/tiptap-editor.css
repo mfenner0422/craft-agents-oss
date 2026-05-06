@@ -101,6 +101,11 @@
 }
 
 /* Nested lists */
+.tiptap-editor .tiptap-prose li > ul,
+.tiptap-editor .tiptap-prose li > ol {
+  margin: 0;
+}
+
 .tiptap-editor .tiptap-prose ul ul,
 .tiptap-editor .tiptap-prose ol ul {
   list-style-type: circle;

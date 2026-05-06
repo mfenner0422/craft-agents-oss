@@ -181,15 +181,18 @@ export const CHANNEL_MAP = {
   onCaptureHotkeyConflict: listener(RPC_CHANNELS.app.CAPTURE_HOTKEY_CONFLICT),
   saveCapture: invoke(RPC_CHANNELS.capture.SAVE),
   listCaptureInbox: invoke(RPC_CHANNELS.capture.LIST),
+  deleteCapture: invoke(RPC_CHANNELS.capture.DELETE),
   enrichCaptureUrl: invoke(RPC_CHANNELS.capture.ENRICH_URL),
   openCaptureWindow: invoke(RPC_CHANNELS.capture.OPEN),
   onCaptureSaved: listener(RPC_CHANNELS.capture.SAVED),
   ensureDay: invoke(RPC_CHANNELS.days.ENSURE),
   getDay: invoke(RPC_CHANNELS.days.GET),
+  getDaysBoard: invoke(RPC_CHANNELS.days.GET_BOARD),
   listDays: invoke(RPC_CHANNELS.days.LIST),
   getIncompleteDayTasks: invoke(RPC_CHANNELS.days.INCOMPLETE_TASKS),
   pullForwardDayTasks: invoke(RPC_CHANNELS.days.PULL_FORWARD),
   updateDayFile: invoke(RPC_CHANNELS.days.UPDATE_FILE),
+  updateDayTaskLists: invoke(RPC_CHANNELS.days.UPDATE_TASK_LISTS),
   onDaysChanged: listener(RPC_CHANNELS.days.CHANGED),
 
   // Folder dialog

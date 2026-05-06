@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
+import Link from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from './extensions/AnimatedTaskItem'
@@ -15,6 +16,7 @@ import { TiptapSlashMenu } from './TiptapSlashMenu'
 import { MermaidBlock } from './extensions/MermaidBlock'
 import { LatexBlock } from './extensions/LatexBlock'
 import { RichBlockInteractions } from './extensions/RichBlockInteractions'
+import { Extension, textblockTypeInputRule } from '@tiptap/core'
 import { cn } from '../../lib/utils'
 import 'katex/dist/katex.min.css'
 import './tiptap-editor.css'
@@ -95,6 +97,26 @@ export function preprocessMarkdownForOfficial(markdown: string): string {
 export function postprocessMarkdownFromOfficial(markdown: string): string {
   return markdown.replaceAll(CURRENCY_MARKER, '$')
 }
+
+function isLikelyUrl(value: string): boolean {
+  return /^(https?:\/\/|mailto:)[^\s]+$/i.test(value.trim())
+}
+
+const NotesHeadingInputRules = Extension.create({
+  name: 'notesHeadingInputRules',
+
+  addInputRules() {
+    const heading = this.editor.schema.nodes.heading
+    if (!heading) return []
+    return [
+      textblockTypeInputRule({
+        find: /^(#{1,6})\s$/,
+        type: heading,
+        getAttributes: { level: 2 },
+      }),
+    ]
+  },
+})
 
 const MERMAID_FILE_EXTENSIONS = new Set(['mmd', 'mermaid'])
 const MERMAID_DIAGRAM_PREFIXES = [
@@ -224,6 +246,8 @@ export interface TiptapMarkdownEditorProps {
   className?: string
   /** Whether the editor is editable */
   editable?: boolean
+  /** Restrict authoring tools for simple notes. */
+  preset?: 'full' | 'notes'
   /**
    * Migration flag for markdown engine foundations.
    * - `legacy`: tiptap-markdown (default for safe rollout)
@@ -238,6 +262,7 @@ export function TiptapMarkdownEditor({
   placeholder = 'Write something...',
   className,
   editable = true,
+  preset = 'full',
   markdownEngine = 'legacy',
 }: TiptapMarkdownEditorProps) {
   const onUpdateRef = React.useRef(onUpdate)
@@ -248,39 +273,48 @@ export function TiptapMarkdownEditor({
   const editorRef = React.useRef<ReturnType<typeof useEditor>>(null!)
 
   const useOfficialMarkdown = markdownEngine === 'official'
+  const isNotesPreset = preset === 'notes'
 
   const extensions = React.useMemo(() => {
     const base = [
       StarterKit.configure({
         codeBlock: false,
-        heading: { levels: [1, 2, 3] },
+        heading: { levels: isNotesPreset ? [2] : [1, 2, 3] },
       }),
-      TaskList,
-      TaskItem.configure({
-        nested: true,
+      Link.configure({
+        openOnClick: false,
+        autolink: !isNotesPreset,
+        linkOnPaste: !isNotesPreset,
       }),
-      tiptapCodeBlock.configure({
-        themes: { light: 'github-light', dark: 'github-dark' },
-      }),
-      MermaidBlock,
-      LatexBlock,
       Placeholder.configure({ placeholder }),
-      Image.configure({
-        inline: false,
-        allowBase64: true,
-      }),
-      FileHandler.configure({
-        onPaste: async (editor, files) => {
-          if (!editable || files.length === 0) return
-          await handleDroppedOrPastedFiles(editor as NonNullable<ReturnType<typeof useEditor>>, files)
-        },
-        onDrop: async (editor, files, pos) => {
-          if (!editable || files.length === 0) return
-          await handleDroppedOrPastedFiles(editor as NonNullable<ReturnType<typeof useEditor>>, files, pos)
-        },
-      }),
-      RichBlockInteractions,
-      ...(editable ? [TiptapSlashMenu] : []),
+      ...(isNotesPreset ? [NotesHeadingInputRules] : []),
+      ...(isNotesPreset ? [] : [
+        TaskList,
+        TaskItem.configure({
+          nested: true,
+        }),
+        tiptapCodeBlock.configure({
+          themes: { light: 'github-light', dark: 'github-dark' },
+        }),
+        MermaidBlock,
+        LatexBlock,
+        Image.configure({
+          inline: false,
+          allowBase64: true,
+        }),
+        FileHandler.configure({
+          onPaste: async (editor, files) => {
+            if (!editable || files.length === 0) return
+            await handleDroppedOrPastedFiles(editor as NonNullable<ReturnType<typeof useEditor>>, files)
+          },
+          onDrop: async (editor, files, pos) => {
+            if (!editable || files.length === 0) return
+            await handleDroppedOrPastedFiles(editor as NonNullable<ReturnType<typeof useEditor>>, files, pos)
+          },
+        }),
+        RichBlockInteractions,
+        ...(editable ? [TiptapSlashMenu] : []),
+      ]),
     ]
 
     if (useOfficialMarkdown) {
@@ -317,7 +351,7 @@ export function TiptapMarkdownEditor({
         transformCopiedText: true,
       }),
     ]
-  }, [placeholder, useOfficialMarkdown])
+  }, [editable, isNotesPreset, placeholder, useOfficialMarkdown])
 
   const initialContent = useOfficialMarkdown
     ? preprocessMarkdownForOfficial(content)
@@ -332,8 +366,26 @@ export function TiptapMarkdownEditor({
       attributes: {
         class: 'tiptap-prose outline-none',
       },
+      handleKeyDown: (_view, event) => {
+        if (!editable || !isNotesPreset || event.key !== 'Tab' || !event.shiftKey) return false
+        const activeEditor = editorRef.current
+        if (!activeEditor) return false
+        const handled = activeEditor.commands.liftListItem('listItem')
+        if (handled) {
+          event.preventDefault()
+          return true
+        }
+        return false
+      },
       handlePaste: (_view, event) => {
         if (!editable) return false
+        if (isNotesPreset) {
+          const activeEditor = editorRef.current
+          const text = event.clipboardData?.getData('text/plain')?.trim() ?? ''
+          if (!activeEditor || !isLikelyUrl(text) || activeEditor.state.selection.empty) return false
+          activeEditor.chain().focus().extendMarkRange('link').setLink({ href: text }).run()
+          return true
+        }
         if (event.clipboardData?.files?.length) return false
 
         const text = event.clipboardData?.getData('text/plain') ?? ''
@@ -346,7 +398,7 @@ export function TiptapMarkdownEditor({
         return true
       },
       handleDrop: (view, event) => {
-        if (!editable) return false
+        if (!editable || isNotesPreset) return false
         if (event.dataTransfer?.files?.length) return false
 
         const text = event.dataTransfer?.getData('text/plain') ?? ''
@@ -360,6 +412,19 @@ export function TiptapMarkdownEditor({
         return true
       },
     },
+    onTransaction: ({ editor }) => {
+      if (!isNotesPreset) return
+      const { state } = editor
+      const tr = state.tr
+      let changed = false
+      state.doc.descendants((node, pos) => {
+        if (node.type.name === 'heading' && node.attrs.level !== 2) {
+          tr.setNodeMarkup(pos, undefined, { ...node.attrs, level: 2 })
+          changed = true
+        }
+      })
+      if (changed) editor.view.dispatch(tr)
+    },
     onCreate: ({ editor }) => {
       queueMicrotask(() => {
         scheduleShikiRefresh(editor)
@@ -371,7 +436,7 @@ export function TiptapMarkdownEditor({
         : getLegacyMarkdown(editor as { storage: { markdown?: { getMarkdown?: () => string } } })
       onUpdateRef.current?.(md)
     },
-  }, [useOfficialMarkdown, extensions])
+  }, [useOfficialMarkdown, extensions, isNotesPreset])
 
   // Keep editorRef in sync for the Mathematics onClick callback
   editorRef.current = editor
@@ -420,7 +485,7 @@ export function TiptapMarkdownEditor({
   return (
     <div className={cn('tiptap-editor', className)}>
       <EditorContent editor={editor} />
-      {editor && editable && <TiptapBubbleMenus editor={editor} />}
+      {editor && editable && !isNotesPreset && <TiptapBubbleMenus editor={editor} />}
     </div>
   )
 }

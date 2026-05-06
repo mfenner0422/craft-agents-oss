@@ -1,3 +1,3 @@
-# Tasks
+# Today
 
 - [ ] Plan the day

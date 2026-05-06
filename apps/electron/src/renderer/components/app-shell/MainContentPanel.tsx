@@ -34,11 +34,12 @@ import {
   isCaptureNavigation,
   isDaysNavigation,
 } from '@/contexts/NavigationContext'
-import { CaptureItemView } from '@craft-agent/ui/capture'
+import CaptureInfoPage from '@/pages/CaptureInfoPage'
 import type { CaptureItem } from '@craft-agent/shared/capture'
 import { DaysMainPane } from '@craft-agent/ui/days'
 import { addDays, todayDateISO } from '@craft-agent/shared/days/date'
-import type { DayFileKind, DayRecord, DayTask } from '@craft-agent/shared/days'
+import { navigate, routes } from '@/lib/navigate'
+import type { DayFileKind, DayRecord, DayTask, DaysBoardRecord } from '@craft-agent/shared/days'
 import { useSessionSelection, useIsMultiSelectActive, useSelectedIds, useSelectionCount } from '@/hooks/useSession'
 import { sourceSelection, skillSelection, automationSelection } from '@/hooks/useEntitySelection'
 import { extractLabelId } from '@craft-agent/shared/labels'
@@ -98,7 +99,7 @@ export function MainContentPanel({
   const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
   const automations = useAtomValue(automationsAtom)
   const [captureItems, setCaptureItems] = useState<CaptureItem[]>([])
-  const [day, setDay] = useState<DayRecord | null>(null)
+  const [day, setDay] = useState<DaysBoardRecord | null>(null)
   const [isDayPlaceholder, setIsDayPlaceholder] = useState(false)
   const [carryForwardTasks, setCarryForwardTasks] = useState<DayTask[]>([])
 
@@ -149,7 +150,7 @@ export function MainContentPanel({
   useEffect(() => {
     if (!activeWorkspaceId || !isDaysNavigation(navState)) return
     const dateISO = navState.dateISO ?? todayDateISO()
-    window.electronAPI.getDay(activeWorkspaceId, dateISO).then(record => {
+    loadDaysBoard(activeWorkspaceId, dateISO).then(record => {
       if (record) {
         setDay(record)
         setIsDayPlaceholder(false)
@@ -158,14 +159,17 @@ export function MainContentPanel({
         setDay(defaultDayRecord(dateISO))
         setIsDayPlaceholder(true)
       }
-    }).catch(() => setDay(null))
+    }).catch(() => {
+      setDay(defaultDayRecord(dateISO))
+      setIsDayPlaceholder(true)
+    })
     window.electronAPI.getIncompleteDayTasks(activeWorkspaceId, addDays(dateISO, -1)).then(setCarryForwardTasks).catch(() => setCarryForwardTasks([]))
   }, [activeWorkspaceId, navState])
 
   const handlePullForwardDayTasks = useCallback(async () => {
     if (!activeWorkspaceId || !day) return
     await window.electronAPI.pullForwardDayTasks(activeWorkspaceId, addDays(day.dateISO, -1), day.dateISO)
-    setDay(await window.electronAPI.ensureDay(activeWorkspaceId, day.dateISO))
+    setDay(await loadDaysBoard(activeWorkspaceId, day.dateISO))
     setCarryForwardTasks([])
   }, [activeWorkspaceId, day])
 
@@ -176,19 +180,124 @@ export function MainContentPanel({
       await window.electronAPI.ensureDay(activeWorkspaceId, day.dateISO)
       setIsDayPlaceholder(false)
     }
-    setDay(await window.electronAPI.updateDayFile(activeWorkspaceId, day.dateISO, kind, content))
+    await window.electronAPI.updateDayFile(activeWorkspaceId, day.dateISO, kind, content)
+    setDay(await loadDaysBoard(activeWorkspaceId, day.dateISO))
   }, [activeWorkspaceId, day, isDayPlaceholder])
 
+  const handleUpdateDayTaskLists = useCallback(async (payload: { today: DayTask[]; next: DayTask[]; someday: DayTask[] }) => {
+    if (!activeWorkspaceId || !day) return
+    if (isDayPlaceholder) {
+      await window.electronAPI.ensureDay(activeWorkspaceId, day.dateISO)
+      setIsDayPlaceholder(false)
+    }
+    if (window.electronAPI.isChannelAvailable('days:updateTaskLists')) {
+      await window.electronAPI.updateDayTaskLists(activeWorkspaceId, day.dateISO, payload)
+    } else {
+      await window.electronAPI.updateDayFile(activeWorkspaceId, day.dateISO, 'tasks', payload.today.map(task => `- [ ] ${task.text} <!-- task:${task.id} -->`).join('\n'))
+    }
+  }, [activeWorkspaceId, day, isDayPlaceholder])
+
+  const handleMoveDayTaskToDate = useCallback(async (task: DayTask, dateISO: string) => {
+    if (!activeWorkspaceId) return
+    await window.electronAPI.ensureDay(activeWorkspaceId, dateISO)
+    const targetBoard = await loadDaysBoard(activeWorkspaceId, dateISO) ?? defaultDayRecord(dateISO)
+    const payload = {
+      today: [...targetBoard.tasks.today.filter(item => item.id !== task.id), task],
+      next: targetBoard.tasks.next,
+      someday: targetBoard.tasks.someday,
+    }
+    if (window.electronAPI.isChannelAvailable('days:updateTaskLists')) {
+      const updated = await window.electronAPI.updateDayTaskLists(activeWorkspaceId, dateISO, payload)
+      if (day?.dateISO === dateISO) setDay(updated)
+    } else {
+      await window.electronAPI.updateDayFile(activeWorkspaceId, dateISO, 'tasks', payload.today.map(formatFallbackTaskLine).join('\n'))
+      if (day?.dateISO === dateISO) setDay(await loadDaysBoard(activeWorkspaceId, dateISO))
+    }
+  }, [activeWorkspaceId, day])
+
   /** Default in-memory day record for placeholder dates (not yet on disk) */
-  function defaultDayRecord(dateISO: string): DayRecord {
+  function defaultDayRecord(dateISO: string): DaysBoardRecord {
     return {
       dateISO,
       files: {
-        tasks: '# Tasks\n\n- [ ] Plan the day\n',
+        tasks: '# Today\n\n- [ ] Plan the day\n',
         scratch: '# Scratch\n',
         journal: '# Journal\n',
       },
+      bodies: {
+        tasks: '- [ ] Plan the day\n',
+        scratch: '',
+        journal: '',
+      },
+      tasks: {
+        today: [{ id: 'plan-the-day', text: 'Plan the day', status: 'todo' }],
+        next: [],
+        someday: [],
+      },
     }
+  }
+
+  async function loadDaysBoard(workspaceId: string, dateISO: string): Promise<DaysBoardRecord | null> {
+    if (window.electronAPI.isChannelAvailable('days:getBoard')) {
+      try {
+        return await window.electronAPI.getDaysBoard(workspaceId, dateISO)
+      } catch {
+        // Running app may still have an older main/server process during hot reload.
+      }
+    }
+    const record = await window.electronAPI.getDay(workspaceId, dateISO)
+    return record ? dayRecordToBoard(record) : null
+  }
+
+  function dayRecordToBoard(record: DayRecord): DaysBoardRecord {
+    const bodies = record.bodies ?? {
+      tasks: stripManagedTitle(record.files.tasks),
+      scratch: stripManagedTitle(record.files.scratch),
+      journal: stripManagedTitle(record.files.journal),
+    }
+    return {
+      ...record,
+      bodies,
+      tasks: {
+        today: parseFallbackTaskList(bodies.tasks),
+        next: [],
+        someday: [],
+      },
+    }
+  }
+
+  function stripManagedTitle(content: string): string {
+    return content.replace(/^\s*#\s+[^\n]*\n?/, '').replace(/^\n/, '')
+  }
+
+  function formatFallbackTaskLine(task: DayTask): string {
+    const markerByStatus: Record<DayTask['status'], string> = {
+      todo: ' ',
+      in_progress: '/',
+      delegated: '>',
+      completed: 'x',
+      canceled: '-',
+    }
+    return `- [${markerByStatus[task.status] ?? ' '}] ${task.text} <!-- task:${task.id} -->`
+  }
+
+  function parseFallbackTaskList(content: string): DayTask[] {
+    const markerToStatus: Record<string, DayTask['status']> = {
+      ' ': 'todo',
+      '/': 'in_progress',
+      '>': 'delegated',
+      x: 'completed',
+      X: 'completed',
+      '-': 'canceled',
+    }
+    return content.split(/\r?\n/).flatMap(line => {
+      const match = line.match(/^\s*-\s+\[([ xX/>\-])\]\s+(.+?)\s*$/)
+      if (!match?.[1] || !match[2]) return []
+      const text = match[2].replace(/\s*<!--\s*task:[a-zA-Z0-9_-]+\s*-->\s*$/, '').trim()
+      if (!text) return []
+      const id = line.match(/<!--\s*task:([a-zA-Z0-9_-]+)\s*-->/)?.[1] ?? `legacy-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`
+      return [{ id, text, status: markerToStatus[match[1]] ?? 'todo', line }]
+    })
   }
 
   // Source multi-select state
@@ -427,7 +536,7 @@ export function MainContentPanel({
     const selected = navState.details ? captureItems.find(item => item.id === navState.details!.id) : null
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
-        <CaptureItemView item={selected} />
+        <CaptureInfoPage item={selected ?? null} workspaceId={activeWorkspaceId ?? undefined} />
       </Panel>
     )
   }
@@ -440,6 +549,9 @@ export function MainContentPanel({
           carryForwardTasks={carryForwardTasks}
           onPullForward={handlePullForwardDayTasks}
           onUpdateFile={handleUpdateDayFile}
+          onUpdateTaskLists={handleUpdateDayTaskLists}
+          onMoveTaskToDate={handleMoveDayTaskToDate}
+          onNavigateToDate={(dateISO) => navigate(routes.view.days(dateISO))}
         />
       </Panel>
     )

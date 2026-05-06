@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, mkdirSync, readdirSync, unlinkSync } from 'node:fs';
+import { join, relative, resolve } from 'node:path';
 import { generateShortId } from '../automations/resolve-config-path.ts';
 import { readMarkdown, writeMarkdown } from '../vault/markdown.ts';
 
@@ -97,6 +97,36 @@ export function listInboxItems(vaultRoot: string, limit = 100): CaptureItem[] {
         body: doc.content,
       };
     });
+}
+
+export function deleteCaptureItem(vaultRoot: string, itemId: string): void {
+  const inboxDir = join(vaultRoot, 'inbox');
+  if (!existsSync(inboxDir)) {
+    throw new Error(`Capture item not found: ${itemId}`);
+  }
+
+  const match = readdirSync(inboxDir)
+    .filter(name => name.endsWith('.md'))
+    .map(name => {
+      const filePath = join(inboxDir, name);
+      const doc = readMarkdown(filePath);
+      const id = String(doc.data.id ?? name.replace(/\.md$/, ''));
+      return { id, filePath };
+    })
+    .find(entry => entry.id === itemId);
+
+  if (!match) {
+    throw new Error(`Capture item not found: ${itemId}`);
+  }
+
+  const resolvedRoot = resolve(vaultRoot);
+  const resolvedFile = resolve(match.filePath);
+  const rel = relative(resolvedRoot, resolvedFile);
+  if (rel.startsWith('..') || rel === '' || resolve(resolvedRoot, rel) !== resolvedFile) {
+    throw new Error(`Refusing to delete capture file outside vault: ${match.filePath}`);
+  }
+
+  unlinkSync(resolvedFile);
 }
 
 export interface EnrichResult {

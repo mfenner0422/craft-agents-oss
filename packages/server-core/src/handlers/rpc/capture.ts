@@ -1,5 +1,5 @@
 import { getWorkspaceOrThrow } from '@craft-agent/server-core/handlers';
-import { captureItem, enrichUrl, listInboxItems } from '@craft-agent/shared/capture';
+import { captureItem, deleteCaptureItem, enrichUrl, listInboxItems } from '@craft-agent/shared/capture';
 import { resolveVaultRoot, writeMarkdown } from '@craft-agent/shared/vault';
 import { loadWorkspaceConfig } from '@craft-agent/shared/workspaces';
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol';
@@ -9,6 +9,7 @@ import type { HandlerDeps } from '../handler-deps';
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.capture.SAVE,
   RPC_CHANNELS.capture.LIST,
+  RPC_CHANNELS.capture.DELETE,
   RPC_CHANNELS.capture.ENRICH_URL,
 ] as const;
 
@@ -69,6 +70,13 @@ export function registerCaptureHandlers(server: RpcServer, _deps: HandlerDeps): 
     const config = loadWorkspaceConfig(workspace.rootPath);
     const vaultRoot = resolveVaultRoot(workspace.rootPath, config);
     return listInboxItems(vaultRoot, limit);
+  });
+
+  server.handle(RPC_CHANNELS.capture.DELETE, async (_ctx, workspaceId: string, itemId: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId);
+    const config = loadWorkspaceConfig(workspace.rootPath);
+    const vaultRoot = resolveVaultRoot(workspace.rootPath, config);
+    deleteCaptureItem(vaultRoot, itemId);
   });
 
   server.handle(RPC_CHANNELS.capture.ENRICH_URL, async (_ctx, url: string) => enrichUrl(url));

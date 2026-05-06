@@ -434,15 +434,18 @@ export interface ElectronAPI {
   onCaptureHotkeyConflict(callback: (payload: { accelerator: string; error: string }) => void): () => void
   saveCapture(input: { workspaceId: string; source: string; url?: string; title?: string; body: string; tags?: string[] }): Promise<import('@craft-agent/shared/capture').CaptureItem>
   listCaptureInbox(workspaceId: string, limit?: number): Promise<import('@craft-agent/shared/capture').CaptureItem[]>
+  deleteCapture(workspaceId: string, itemId: string): Promise<void>
   enrichCaptureUrl(url: string): Promise<{ title?: string; description?: string }>
   openCaptureWindow(workspaceId: string): Promise<void>
   onCaptureSaved(callback: (payload: { workspaceId: string; item: import('@craft-agent/shared/capture').CaptureItem }) => void): () => void
   ensureDay(workspaceId: string, dateISO?: string): Promise<import('@craft-agent/shared/days').DayRecord>
   getDay(workspaceId: string, dateISO: string): Promise<import('@craft-agent/shared/days').DayRecord | null>
+  getDaysBoard(workspaceId: string, dateISO: string): Promise<import('@craft-agent/shared/days').DaysBoardRecord | null>
   listDays(workspaceId: string, limit?: number): Promise<string[]>
   getIncompleteDayTasks(workspaceId: string, dateISO: string): Promise<import('@craft-agent/shared/days').DayTask[]>
   pullForwardDayTasks(workspaceId: string, fromDateISO: string, toDateISO: string): Promise<import('@craft-agent/shared/days').DayTask[]>
   updateDayFile(workspaceId: string, dateISO: string, kind: import('@craft-agent/shared/days').DayFileKind, content: string): Promise<import('@craft-agent/shared/days').DayRecord>
+  updateDayTaskLists(workspaceId: string, dateISO: string, payload: { today: import('@craft-agent/shared/days').DayTask[]; next: import('@craft-agent/shared/days').DayTask[]; someday: import('@craft-agent/shared/days').DayTask[] }): Promise<import('@craft-agent/shared/days').DaysBoardRecord>
   onDaysChanged(callback: (payload: { workspaceId: string; dateISO: string }) => void): () => void
 
   // Folder dialog

@@ -53,6 +53,8 @@ export interface EntityListProps<T> {
   emptyState?: React.ReactNode
   /** Header content above the list (e.g. search bar) — rendered outside ScrollArea */
   header?: React.ReactNode
+  /** Content rendered inside ScrollArea, before the items/groups (e.g. a "load earlier" button). Scrolls with content. */
+  listPrepend?: React.ReactNode
   /** Footer content after all items (e.g. infinite scroll sentinel) — inside ScrollArea */
   footer?: React.ReactNode
   /** Ref for the inner list container (for keyboard navigation zones) */
@@ -150,6 +152,7 @@ export function EntityList<T>({
   getKey,
   emptyState,
   header,
+  listPrepend,
   footer,
   containerRef,
   containerProps,
@@ -185,6 +188,7 @@ export function EntityList<T>({
           className="flex flex-col pb-2"
           {...containerProps}
         >
+          {listPrepend}
           <div className="pt-1">
             {hasGroups
               ? groups!.map((group) => {

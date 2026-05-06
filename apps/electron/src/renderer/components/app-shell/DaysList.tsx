@@ -16,13 +16,8 @@ import { addDays, formatLocalDateISO, parseDateISO } from '@craft-agent/shared/d
 import * as storage from '@/lib/local-storage'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import {
-  ContextMenu,
-  ContextMenuTrigger,
-  StyledContextMenuContent,
-  StyledContextMenuItem,
-  StyledContextMenuSeparator,
-} from '@/components/ui/styled-context-menu'
+import { Separator } from '@/components/ui/separator'
+import { EntityList, type EntityListGroup } from '@/components/ui/entity-list'
 
 export interface DaysListProps {
   /** ISO date strings that already have vault pages */
@@ -177,8 +172,7 @@ export function DaysList({ days, selectedDate, workspaceId, onSelectDay }: DaysL
 
   const [loadedPastWeeks, setLoadedPastWeeks] = useState(INITIAL_WEEKS)
   const [loadedFutureWeeks, setLoadedFutureWeeks] = useState(INITIAL_WEEKS)
-  const listRef = useRef<HTMLDivElement>(null)
-  const selectedWeekRef = useRef<HTMLDivElement | null>(null)
+  const viewportRef = useRef<HTMLDivElement>(null)
   const [calendarMonthISO, setCalendarMonthISO] = useState(
     () => selectedDate ?? formatLocalDateISO(new Date()),
   )
@@ -203,7 +197,7 @@ export function DaysList({ days, selectedDate, workspaceId, onSelectDay }: DaysL
     }
   }, [selectedDate, locale])
 
-  const groups = useMemo(
+  const weekGroups = useMemo(
     () => buildWeekGroups(loadedPastWeeks, loadedFutureWeeks, setOfDaysWithContent, locale, t),
     [loadedPastWeeks, loadedFutureWeeks, setOfDaysWithContent, locale, t],
   )
@@ -219,7 +213,7 @@ export function DaysList({ days, selectedDate, workspaceId, onSelectDay }: DaysL
       const raw = storage.getRaw(storage.KEYS.collapsedSessionGroups, scope)
       if (raw === null) {
         const expandedKeys = defaultExpandedWeekKeys(locale)
-        return new Set(groups.filter((g) => !expandedKeys.has(g.key)).map((g) => g.key))
+        return new Set(weekGroups.filter((g) => !expandedKeys.has(g.key)).map((g) => g.key))
       }
       try {
         const parsed = JSON.parse(raw)
@@ -232,7 +226,7 @@ export function DaysList({ days, selectedDate, workspaceId, onSelectDay }: DaysL
         return new Set()
       }
     },
-    [groups, locale],
+    [weekGroups, locale],
   )
 
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
@@ -262,12 +256,22 @@ export function DaysList({ days, selectedDate, workspaceId, onSelectDay }: DaysL
     })
   }, [selectedDate, locale])
 
+  // Scroll the selected day's week into view when selection changes.
+  // We depend on weekGroups/collapsedGroups so this re-runs after auto-load expands
+  // far-away dates into the DOM, but a ref prevents re-scrolling on every group
+  // rebuild (e.g. when the user clicks "Show previous/next weeks" to load more).
+  const lastScrolledDateRef = useRef<string | null>(null)
   useEffect(() => {
-    const row = selectedWeekRef.current
-    const list = listRef.current
-    if (!row || !list) return
-    list.scrollTop = row.offsetTop - list.offsetTop
-  }, [selectedDate, groups, collapsedGroups])
+    const viewport = viewportRef.current
+    if (!viewport || !selectedDate) return
+    if (lastScrolledDateRef.current === selectedDate) return
+    const weekKey = weekKeyForDate(parseDateISO(selectedDate), locale)
+    const target = viewport.querySelector<HTMLElement>(`[data-week-key="${weekKey}"]`)
+    if (target) {
+      viewport.scrollTop = target.offsetTop
+      lastScrolledDateRef.current = selectedDate
+    }
+  }, [selectedDate, weekGroups, collapsedGroups, locale])
 
   const toggleGroup = useCallback((key: string) => {
     setCollapsedGroups((prev) => {
@@ -279,8 +283,8 @@ export function DaysList({ days, selectedDate, workspaceId, onSelectDay }: DaysL
   }, [])
 
   const collapseAll = useCallback(() => {
-    setCollapsedGroups(new Set(groups.map((g) => g.key)))
-  }, [groups])
+    setCollapsedGroups(new Set(weekGroups.map((g) => g.key)))
+  }, [weekGroups])
 
   const expandAll = useCallback(() => {
     setCollapsedGroups(new Set())
@@ -303,182 +307,137 @@ export function DaysList({ days, selectedDate, workspaceId, onSelectDay }: DaysL
     setCalendarMonthISO((current) => formatLocalDateISO(addMonthsToDate(parseDateISO(current), amount)))
   }, [])
 
-  return (
-    <div className="h-full min-h-0 flex flex-col">
-      <div className="shrink-0 border-b border-border/60 p-2 pb-3">
-        <div className="mb-2 flex items-center justify-between px-1">
-          <div className="text-sm font-medium text-foreground">
-            {calendarMonthLabel}
-          </div>
-          <div className="flex items-center gap-0.5">
-            <button
-              type="button"
-              aria-label="Previous month"
-              onClick={() => shiftCalendarMonth(-1)}
-              className="h-7 w-7 rounded-md text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground"
-            >
-              <ChevronLeft className="mx-auto h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              aria-label="Next month"
-              onClick={() => shiftCalendarMonth(1)}
-              className="h-7 w-7 rounded-md text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground"
-            >
-              <ChevronRight className="mx-auto h-4 w-4" />
-            </button>
-          </div>
+  // Build EntityList groups: when collapsed, hide items but keep the count.
+  const entityGroups = useMemo<EntityListGroup<DayRow>[]>(
+    () =>
+      weekGroups.map((group) => {
+        const isCollapsed = collapsedGroups.has(group.key)
+        return {
+          key: group.key,
+          label: group.label,
+          items: isCollapsed ? [] : group.items,
+          collapsible: true,
+          collapsedCount: group.items.length,
+        }
+      }),
+    [weekGroups, collapsedGroups],
+  )
+
+  const flatItems = useMemo(() => entityGroups.flatMap((g) => g.items), [entityGroups])
+
+  const calendar = (
+    <div className="shrink-0 border-b border-border/60 p-2 pb-3">
+      <div className="mb-2 flex items-center justify-between px-1">
+        <div className="text-sm font-medium text-foreground">
+          {calendarMonthLabel}
         </div>
-        <div className="grid grid-cols-7 gap-1 px-1 pb-1">
-          {weekdayLabels.map(day => (
-            <div key={day.key} className="text-center text-[11px] font-medium text-muted-foreground">
-              {day.label}
-            </div>
-          ))}
-        </div>
-        <div className="grid grid-cols-7 gap-1 p-1">
-          {calendarDays.map(day => (
-            <button
-              key={day.dateISO}
-              type="button"
-              onClick={() => onSelectDay?.(day.dateISO)}
-              className={cn(
-                'relative aspect-square rounded-md text-[11px] hover:bg-foreground/[0.04]',
-                selectedDate === day.dateISO && 'bg-foreground/[0.07]',
-              )}
-            >
-              {day.label}
-              {day.inMonth && day.hasContent && <span className="absolute bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-foreground/40" />}
-            </button>
-          ))}
+        <div className="flex items-center gap-0.5">
+          <button
+            type="button"
+            aria-label="Previous month"
+            onClick={() => shiftCalendarMonth(-1)}
+            className="h-7 w-7 rounded-md text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground"
+          >
+            <ChevronLeft className="mx-auto h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            aria-label="Next month"
+            onClick={() => shiftCalendarMonth(1)}
+            className="h-7 w-7 rounded-md text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground"
+          >
+            <ChevronRight className="mx-auto h-4 w-4" />
+          </button>
         </div>
       </div>
-      <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-2">
-        <button
-          type="button"
-          onClick={showPreviousWeeks}
-          className="mb-2 w-full rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground"
-        >
-          {t('day.showPreviousWeeks')}
-        </button>
-        {groups.map((group) => {
-          const isCollapsed = collapsedGroups.has(group.key)
-          return (
-            <div
-              key={group.key}
-              ref={selectedDate && group.items.some((day) => day.dateISO === selectedDate) ? selectedWeekRef : undefined}
-            >
-              <CollapsibleWeekHeader
-                label={group.label}
-                isCollapsed={isCollapsed}
-                onToggle={() => toggleGroup(group.key)}
-                onCollapseAll={collapseAll}
-                onExpandAll={expandAll}
-              />
-              {!isCollapsed && (
-                <div className="flex flex-col">
-                  {group.items.map((day) => (
-                    <DayRowButton
-                      key={day.dateISO}
-                      dateISO={day.dateISO}
-                      hasContent={day.hasContent}
-                      selected={selectedDate === day.dateISO}
-                      locale={locale}
-                      t={t}
-                      onSelect={onSelectDay}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          )
-        })}
-        <button
-          type="button"
-          onClick={showNextWeeks}
-          className="mt-2 w-full rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground"
-        >
-          {t('day.showNextWeeks')}
-        </button>
+      <div className="grid grid-cols-7 gap-1 px-1 pb-1">
+        {weekdayLabels.map(day => (
+          <div key={day.key} className="text-center text-[11px] font-medium text-muted-foreground">
+            {day.label}
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-1 p-1">
+        {calendarDays.map(day => (
+          <button
+            key={day.dateISO}
+            type="button"
+            onClick={() => onSelectDay?.(day.dateISO)}
+            className={cn(
+              'relative aspect-square rounded-md text-[11px] hover:bg-foreground/[0.04]',
+              selectedDate === day.dateISO && 'bg-foreground/[0.07]',
+            )}
+          >
+            {day.label}
+            {day.inMonth && day.hasContent && <span className="absolute bottom-1 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-foreground/40" />}
+          </button>
+        ))}
       </div>
     </div>
   )
-}
 
-function DayRowButton({
-  dateISO,
-  hasContent,
-  selected,
-  locale,
-  t,
-  onSelect,
-}: {
-  dateISO: string
-  hasContent: boolean
-  selected: boolean
-  locale: Locale
-  t: (key: string) => string
-  onSelect?: (dateISO: string) => void
-}) {
-  const date = parseDateISO(dateISO)
-  const label = formatDateGroupLabel(date, locale, t)
-
-  return (
-    <button
-      type="button"
-      onClick={() => onSelect?.(dateISO)}
-      className={cn(
-        'w-full text-left px-3 py-2 rounded-md text-sm hover:bg-foreground/[0.04] flex items-center gap-2',
-        selected && 'bg-foreground/[0.06]',
-      )}
-    >
-      <span className="flex-1">
-        {label}
-      </span>
-      {hasContent && <span className="h-1.5 w-1.5 rounded-full bg-foreground/40" />}
-    </button>
-  )
-}
-
-function CollapsibleWeekHeader({
-  label,
-  isCollapsed,
-  onToggle,
-  onCollapseAll,
-  onExpandAll,
-}: {
-  label: string
-  isCollapsed: boolean
-  onToggle: () => void
-  onCollapseAll: () => void
-  onExpandAll: () => void
-}) {
-  return (
-    <ContextMenu modal>
-      <ContextMenuTrigger asChild>
-        <button
-          onClick={onToggle}
-          className="w-full py-2 px-3 rounded-md flex items-center gap-1.5 cursor-pointer hover:bg-foreground/[0.04]"
-        >
-          <ChevronRight
+  const renderItem = (day: DayRow, indexInGroup: number, isFirstInGroup: boolean) => {
+    const date = parseDateISO(day.dateISO)
+    const label = formatDateGroupLabel(date, locale, t)
+    const selected = selectedDate === day.dateISO
+    const weekKey = weekKeyForDate(date, locale)
+    return (
+      <div data-week-key={isFirstInGroup ? weekKey : undefined}>
+        {!isFirstInGroup && (
+          <div className="px-4">
+            <Separator />
+          </div>
+        )}
+        <div className="relative pl-2 mr-2">
+          {selected && (
+            <div className="absolute left-0 inset-y-0 w-[2px] bg-accent" />
+          )}
+          <button
+            type="button"
+            onClick={() => onSelectDay?.(day.dateISO)}
             className={cn(
-              'h-3 w-3 text-muted-foreground/60 transition-transform',
-              !isCollapsed && 'rotate-90',
+              'w-full text-left px-2 py-3 rounded-[8px] text-sm flex items-center gap-2 transition-[background-color] duration-75',
+              selected ? 'bg-foreground/3' : 'hover:bg-foreground/2',
             )}
-          />
-          <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-            {label}
-          </span>
+          >
+            <span className="flex-1">{label}</span>
+            {day.hasContent && <span className="h-1.5 w-1.5 rounded-full bg-foreground/40" />}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <EntityList<DayRow>
+      items={flatItems}
+      groups={entityGroups}
+      getKey={(day) => day.dateISO}
+      renderItem={renderItem}
+      header={calendar}
+      viewportRef={viewportRef}
+      collapsedGroups={collapsedGroups}
+      onToggleCollapse={toggleGroup}
+      onCollapseAll={collapseAll}
+      onExpandAll={expandAll}
+      listPrepend={
+        <button
+          type="button"
+          onClick={showPreviousWeeks}
+          className="mx-2 mb-1 w-[calc(100%-1rem)] rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground"
+        >
+          {t('day.showPreviousWeeks')}
         </button>
-      </ContextMenuTrigger>
-      <StyledContextMenuContent>
-        <StyledContextMenuItem onClick={onToggle}>
-          {isCollapsed ? 'Expand' : 'Collapse'}
-        </StyledContextMenuItem>
-        <StyledContextMenuSeparator />
-        <StyledContextMenuItem onClick={onCollapseAll}>Collapse All</StyledContextMenuItem>
-        <StyledContextMenuItem onClick={onExpandAll}>Expand All</StyledContextMenuItem>
-      </StyledContextMenuContent>
-    </ContextMenu>
+      }
+      footer={
+        <button
+          type="button"
+          onClick={showNextWeeks}
+          className="mx-2 mt-1 w-[calc(100%-1rem)] rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground"
+        >
+          {t('day.showNextWeeks')}
+        </button>
+      }
+    />
   )
 }

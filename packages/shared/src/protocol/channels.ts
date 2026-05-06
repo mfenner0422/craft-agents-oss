@@ -263,6 +263,7 @@ export const RPC_CHANNELS = {
   capture: {
     SAVE: 'capture:save',
     LIST: 'capture:list',
+    DELETE: 'capture:delete',
     ENRICH_URL: 'capture:enrichUrl',
     SAVED: 'capture:saved',
     OPEN: 'capture:open',
@@ -270,10 +271,12 @@ export const RPC_CHANNELS = {
   days: {
     ENSURE: 'days:ensure',
     GET: 'days:get',
+    GET_BOARD: 'days:getBoard',
     LIST: 'days:list',
     INCOMPLETE_TASKS: 'days:incompleteTasks',
     PULL_FORWARD: 'days:pullForward',
     UPDATE_FILE: 'days:updateFile',
+    UPDATE_TASK_LISTS: 'days:updateTaskLists',
     CHANGED: 'days:changed',
   },
   permissions: {

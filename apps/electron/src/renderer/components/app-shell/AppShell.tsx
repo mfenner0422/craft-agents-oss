@@ -21,6 +21,7 @@ import {
   DatabaseZap,
   Zap,
   Inbox,
+  Bookmark,
   Globe,
   FolderOpen,
   Cake,
@@ -31,7 +32,7 @@ import {
   Radio,
   Bot,
   Info,
-  Vault,
+  BookOpenText,
 } from "lucide-react"
 import {
   DndContext,
@@ -54,7 +55,7 @@ import { Button } from "@/components/ui/button"
 import { HeaderIconButton } from "@/components/ui/HeaderIconButton"
 import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipTrigger, TooltipContent, DocumentFormattedMarkdownOverlay } from "@craft-agent/ui"
-import { CaptureInboxList } from "@craft-agent/ui/capture"
+import { CaptureListPanel } from "@/components/app-shell/CaptureListPanel"
 import { DaysList } from "@/components/app-shell/DaysList"
 import type { CaptureItem } from "@craft-agent/shared/capture"
 import { todayDateISO } from "@craft-agent/shared/days/date"
@@ -1780,12 +1781,39 @@ function AppShellContent({
   }, [])
 
   const handleCaptureClick = useCallback(() => {
-    navigate(routes.view.capture())
-  }, [])
+    const lastId = activeWorkspaceId
+      ? storage.get<string | null>(storage.KEYS.lastSelectedCaptureId, null, activeWorkspaceId)
+      : null
+    if (lastId && captureItems.some(item => item.id === lastId)) {
+      navigate(routes.view.capture(lastId))
+    } else {
+      navigate(routes.view.capture())
+    }
+  }, [activeWorkspaceId, captureItems])
 
-  const handleCaptureItemClick = useCallback((itemId: string) => {
-    navigate(routes.view.capture(itemId))
-  }, [])
+  const handleCaptureItemSelect = useCallback((item: CaptureItem) => {
+    if (activeWorkspaceId) {
+      storage.set(storage.KEYS.lastSelectedCaptureId, item.id, activeWorkspaceId)
+    }
+    navigate(routes.view.capture(item.id))
+  }, [activeWorkspaceId])
+
+  const handleDeleteCapture = useCallback((itemId: string) => {
+    if (!activeWorkspaceId) return
+    const wasSelected = isCaptureNavigation(navState) && navState.details?.type === 'item' && navState.details.id === itemId
+    setCaptureItems(prev => prev.filter(item => item.id !== itemId))
+    const lastId = storage.get<string | null>(storage.KEYS.lastSelectedCaptureId, null, activeWorkspaceId)
+    if (lastId === itemId) {
+      storage.remove(storage.KEYS.lastSelectedCaptureId, activeWorkspaceId)
+    }
+    if (wasSelected) {
+      navigate(routes.view.capture())
+    }
+    void window.electronAPI.deleteCapture(activeWorkspaceId, itemId).catch(() => {
+      // Reload to recover from a failed delete (e.g. file already gone server-side anyway)
+      window.electronAPI.listCaptureInbox(activeWorkspaceId).then(setCaptureItems).catch(() => {})
+    })
+  }, [activeWorkspaceId, navState])
 
   const handleDaysClick = useCallback(() => {
     const today = todayDateISO()
@@ -2489,7 +2517,7 @@ function AppShellContent({
                     {
                       id: "nav:vault",
                       title: t("sidebar.vault"),
-                      icon: Vault,
+                      icon: BookOpenText,
                       variant: (isDaysNavigation(navState) || isCaptureNavigation(navState)) ? "default" : "ghost",
                       expandable: true,
                       expanded: isExpanded('nav:vault'),
@@ -2499,7 +2527,7 @@ function AppShellContent({
                           id: "nav:capture",
                           title: t("sidebar.capture"),
                           label: captureItems.length > 0 ? String(captureItems.length) : undefined,
-                          icon: Inbox,
+                          icon: Bookmark,
                           variant: isCaptureNavigation(navState) ? "default" : "ghost",
                           onClick: handleCaptureClick,
                         },
@@ -3345,10 +3373,11 @@ function AppShellContent({
               />
             )}
             {isCaptureNavigation(navState) && (
-              <CaptureInboxList
+              <CaptureListPanel
                 items={captureItems}
                 selectedItemId={navState.details?.type === 'item' ? navState.details.id : null}
-                onSelectItem={handleCaptureItemClick}
+                onSelectItem={handleCaptureItemSelect}
+                onDeleteCapture={handleDeleteCapture}
               />
             )}
             {isDaysNavigation(navState) && (
