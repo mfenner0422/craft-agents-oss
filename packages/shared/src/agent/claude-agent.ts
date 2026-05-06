@@ -2450,14 +2450,10 @@ This is a branched conversation. All prior messages in this conversation are par
   }
 
   setWorkspace(workspace: Workspace): void {
-    this.config.workspace = workspace;
+    super.setWorkspace(workspace);
     // Clear session when switching workspaces - caller should set session separately if needed
     this.sessionId = null;
     // Note: MCP proxy needs to be reinitialized by the caller (useAgent hook)
-  }
-
-  refreshWorkspaceConfig(workspace: Workspace): void {
-    this.config.workspace = workspace;
   }
 
   getSessionId(): string | null {

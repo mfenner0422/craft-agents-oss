@@ -81,6 +81,22 @@ export default function WorkspaceSettingsPage() {
   const [enabledModes, setEnabledModes] = useState<PermissionMode[]>(['safe', 'ask', 'allow-all'])
   const [modeCyclingError, setModeCyclingError] = useState<string | null>(null)
 
+  const applyWorkspaceSettings = useCallback((settings: WorkspaceSettings) => {
+    setWsName(settings.name || '')
+    setWsNameEditing(settings.name || '')
+    setPermissionMode(settings.permissionMode || 'ask')
+    setWorkingDirectory(settings.workingDirectory || '')
+    setLocalMcpEnabled(settings.localMcpEnabled ?? true)
+    setVaultPath(settings.vaultPath || '')
+    setDaysEnabled(settings.daysEnabled ?? false)
+    setDaysMorningTime(settings.daysMorningTime || '08:00')
+    setDaysEveningTime(settings.daysEveningTime || '19:00')
+    setCaptureEnabled(settings.captureEnabled ?? false)
+    if (settings.cyclablePermissionModes && settings.cyclablePermissionModes.length >= 2) {
+      setEnabledModes(settings.cyclablePermissionModes)
+    }
+  }, [])
+
   // Load workspace settings when active workspace changes
   useEffect(() => {
     const loadWorkspaceSettings = async () => {
@@ -93,20 +109,7 @@ export default function WorkspaceSettingsPage() {
       try {
         const settings = await window.electronAPI.getWorkspaceSettings(activeWorkspaceId)
         if (settings) {
-          setWsName(settings.name || '')
-          setWsNameEditing(settings.name || '')
-          setPermissionMode(settings.permissionMode || 'ask')
-          setWorkingDirectory(settings.workingDirectory || '')
-          setLocalMcpEnabled(settings.localMcpEnabled ?? true)
-          setVaultPath(settings.vaultPath || '')
-          setDaysEnabled(settings.daysEnabled ?? false)
-          setDaysMorningTime(settings.daysMorningTime || '08:00')
-          setDaysEveningTime(settings.daysEveningTime || '19:00')
-          setCaptureEnabled(settings.captureEnabled ?? false)
-          // Load cyclable permission modes from workspace settings
-          if (settings.cyclablePermissionModes && settings.cyclablePermissionModes.length >= 2) {
-            setEnabledModes(settings.cyclablePermissionModes)
-          }
+          applyWorkspaceSettings(settings)
 
           // Load default source slugs
           const savedSlugs = settings.enabledSourceSlugs ?? []
@@ -157,7 +160,25 @@ export default function WorkspaceSettingsPage() {
     }
 
     loadWorkspaceSettings()
-  }, [activeWorkspaceId])
+  }, [activeWorkspaceId, applyWorkspaceSettings])
+
+  useEffect(() => {
+    if (!window.electronAPI || !activeWorkspaceId) return
+    const cleanupChanged = window.electronAPI.onWorkspaceSettingsChanged?.((payload) => {
+      if (payload.workspaceId !== activeWorkspaceId || !payload.settings) return
+      applyWorkspaceSettings(payload.settings)
+    })
+    const cleanupInvalid = window.electronAPI.onWorkspaceSettingsInvalid?.((payload) => {
+      if (payload.workspaceId !== activeWorkspaceId) return
+      toast.error(t('settings.workspace.invalidConfig'), {
+        description: payload.issues.map(issue => `${issue.field}: ${issue.message}`).join('\n'),
+      })
+    })
+    return () => {
+      cleanupChanged?.()
+      cleanupInvalid?.()
+    }
+  }, [activeWorkspaceId, applyWorkspaceSettings, t])
 
   // Subscribe to live source changes (additions/removals)
   useEffect(() => {

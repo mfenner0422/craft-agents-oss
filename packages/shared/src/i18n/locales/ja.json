@@ -930,6 +930,7 @@
   "settings.workspace.enterWorkspaceName": "Workspace名を入力...",
   "settings.workspace.failedToSave": "{{setting}}の保存に失敗しました",
   "settings.workspace.icon": "アイコン",
+  "settings.workspace.invalidConfig": "ワークスペース設定が無効です",
   "settings.workspace.localMcpServers": "ローカルMCPサーバー",
   "settings.workspace.localMcpServersDesc": "stdioサブプロセスサーバーを有効にする",
   "settings.workspace.modeCycling": "モードサイクル",

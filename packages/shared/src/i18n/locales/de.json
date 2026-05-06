@@ -930,6 +930,7 @@
   "settings.workspace.enterWorkspaceName": "Workspace-Namen eingeben...",
   "settings.workspace.failedToSave": "{{setting}} konnte nicht gespeichert werden",
   "settings.workspace.icon": "Symbol",
+  "settings.workspace.invalidConfig": "Ungültige Arbeitsbereichskonfiguration",
   "settings.workspace.localMcpServers": "Lokale MCP-Server",
   "settings.workspace.localMcpServersDesc": "Stdio-Subprozess-Server aktivieren",
   "settings.workspace.modeCycling": "Modusumschaltung",
