@@ -438,10 +438,12 @@ export interface ElectronAPI {
   openCaptureWindow(workspaceId: string): Promise<void>
   onCaptureSaved(callback: (payload: { workspaceId: string; item: import('@craft-agent/shared/capture').CaptureItem }) => void): () => void
   ensureDay(workspaceId: string, dateISO?: string): Promise<import('@craft-agent/shared/days').DayRecord>
+  getDay(workspaceId: string, dateISO: string): Promise<import('@craft-agent/shared/days').DayRecord | null>
   listDays(workspaceId: string, limit?: number): Promise<string[]>
   getIncompleteDayTasks(workspaceId: string, dateISO: string): Promise<import('@craft-agent/shared/days').DayTask[]>
   pullForwardDayTasks(workspaceId: string, fromDateISO: string, toDateISO: string): Promise<import('@craft-agent/shared/days').DayTask[]>
   updateDayFile(workspaceId: string, dateISO: string, kind: import('@craft-agent/shared/days').DayFileKind, content: string): Promise<import('@craft-agent/shared/days').DayRecord>
+  onDaysChanged(callback: (payload: { workspaceId: string; dateISO: string }) => void): () => void
 
   // Folder dialog
   openFolderDialog(): Promise<string | null>

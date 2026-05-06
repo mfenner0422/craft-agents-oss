@@ -36,6 +36,22 @@ export function ensureDay(vaultRoot: string, dateISO = todayDateISO()): DayRecor
   return { dateISO, files };
 }
 
+export function readDay(vaultRoot: string, dateISO: string): DayRecord | null {
+  assertDateISO(dateISO);
+  const files = {} as Record<DayFileKind, string>;
+  let anyExist = false;
+  for (const kind of DAY_FILE_KINDS) {
+    const filePath = getDayFilePath(vaultRoot, dateISO, kind);
+    if (existsSync(filePath)) {
+      anyExist = true;
+      files[kind] = readFileSync(filePath, 'utf-8');
+    } else {
+      files[kind] = loadTemplate(vaultRoot, kind);
+    }
+  }
+  return anyExist ? { dateISO, files } : null;
+}
+
 export function listDays(vaultRoot: string, limit = 30): string[] {
   const dailyRoot = join(vaultRoot, 'daily');
   if (!existsSync(dailyRoot)) return [];

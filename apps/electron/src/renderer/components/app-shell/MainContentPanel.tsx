@@ -99,6 +99,7 @@ export function MainContentPanel({
   const automations = useAtomValue(automationsAtom)
   const [captureItems, setCaptureItems] = useState<CaptureItem[]>([])
   const [day, setDay] = useState<DayRecord | null>(null)
+  const [isDayPlaceholder, setIsDayPlaceholder] = useState(false)
   const [carryForwardTasks, setCarryForwardTasks] = useState<DayTask[]>([])
 
   // Execution history for the selected automation
@@ -148,7 +149,16 @@ export function MainContentPanel({
   useEffect(() => {
     if (!activeWorkspaceId || !isDaysNavigation(navState)) return
     const dateISO = navState.dateISO ?? todayDateISO()
-    window.electronAPI.ensureDay(activeWorkspaceId, dateISO).then(setDay).catch(() => setDay(null))
+    window.electronAPI.getDay(activeWorkspaceId, dateISO).then(record => {
+      if (record) {
+        setDay(record)
+        setIsDayPlaceholder(false)
+      } else {
+        // Day doesn't exist on disk yet — show in-memory default templates
+        setDay(defaultDayRecord(dateISO))
+        setIsDayPlaceholder(true)
+      }
+    }).catch(() => setDay(null))
     window.electronAPI.getIncompleteDayTasks(activeWorkspaceId, addDays(dateISO, -1)).then(setCarryForwardTasks).catch(() => setCarryForwardTasks([]))
   }, [activeWorkspaceId, navState])
 
@@ -161,8 +171,25 @@ export function MainContentPanel({
 
   const handleUpdateDayFile = useCallback(async (kind: DayFileKind, content: string) => {
     if (!activeWorkspaceId || !day) return
+    if (isDayPlaceholder) {
+      // First write to a placeholder day: create the vault page on disk, then update the file
+      await window.electronAPI.ensureDay(activeWorkspaceId, day.dateISO)
+      setIsDayPlaceholder(false)
+    }
     setDay(await window.electronAPI.updateDayFile(activeWorkspaceId, day.dateISO, kind, content))
-  }, [activeWorkspaceId, day])
+  }, [activeWorkspaceId, day, isDayPlaceholder])
+
+  /** Default in-memory day record for placeholder dates (not yet on disk) */
+  function defaultDayRecord(dateISO: string): DayRecord {
+    return {
+      dateISO,
+      files: {
+        tasks: '# Tasks\n\n- [ ] Plan the day\n',
+        scratch: '# Scratch\n',
+        journal: '# Journal\n',
+      },
+    }
+  }
 
   // Source multi-select state
   const isSourceMultiSelectActive = sourceSelection.useIsMultiSelectActive()

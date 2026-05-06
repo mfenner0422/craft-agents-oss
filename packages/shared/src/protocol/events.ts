@@ -31,6 +31,7 @@ export interface BroadcastEventMap {
   [RPC_CHANNELS.llmConnections.CHANGED]: []
   [RPC_CHANNELS.permissions.DEFAULTS_CHANGED]: [value: null]
   [RPC_CHANNELS.capture.SAVED]: [payload: { workspaceId: string; item: CaptureItem }]
+  [RPC_CHANNELS.days.CHANGED]: [payload: { workspaceId: string; dateISO: string }]
 
   // Theme broadcasts (global)
   [RPC_CHANNELS.theme.APP_CHANGED]: [theme: ThemeOverrides | null]

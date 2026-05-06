@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { afterEach, describe, expect, it } from 'bun:test';
-import { ensureDay, getIncompleteTasks, listDays, pullForwardTasks, updateDayFile } from '../store.ts';
+import { ensureDay, getIncompleteTasks, listDays, pullForwardTasks, readDay, updateDayFile } from '../store.ts';
 import { addDays, formatLocalDateISO, parseDateISO } from '../date.ts';
 
 const tempDirs: string[] = [];
@@ -46,6 +46,16 @@ describe('days store', () => {
     const second = ensureDay(vaultRoot, '2026-05-06');
     expect(second.files.tasks).toBe(first.files.tasks);
     expect(second.files.scratch).toBe('keep me\n');
+  });
+
+  it('reads existing partial days without creating missing files', () => {
+    const vaultRoot = tempVault();
+    expect(readDay(vaultRoot, '2026-05-06')).toBeNull();
+    mkdirSync(join(vaultRoot, 'daily', '2026-05-06'), { recursive: true });
+    writeFileSync(join(vaultRoot, 'daily', '2026-05-06', 'scratch.md'), 'existing scratch\n', 'utf-8');
+    const day = readDay(vaultRoot, '2026-05-06');
+    expect(day?.files.scratch).toBe('existing scratch\n');
+    expect(day?.files.tasks).toContain('# Tasks');
   });
 
   it('sorts days descending and respects the limit', () => {

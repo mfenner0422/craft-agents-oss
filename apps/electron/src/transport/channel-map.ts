@@ -185,10 +185,12 @@ export const CHANNEL_MAP = {
   openCaptureWindow: invoke(RPC_CHANNELS.capture.OPEN),
   onCaptureSaved: listener(RPC_CHANNELS.capture.SAVED),
   ensureDay: invoke(RPC_CHANNELS.days.ENSURE),
+  getDay: invoke(RPC_CHANNELS.days.GET),
   listDays: invoke(RPC_CHANNELS.days.LIST),
   getIncompleteDayTasks: invoke(RPC_CHANNELS.days.INCOMPLETE_TASKS),
   pullForwardDayTasks: invoke(RPC_CHANNELS.days.PULL_FORWARD),
   updateDayFile: invoke(RPC_CHANNELS.days.UPDATE_FILE),
+  onDaysChanged: listener(RPC_CHANNELS.days.CHANGED),
 
   // Folder dialog
   openFolderDialog: invoke(RPC_CHANNELS.dialog.OPEN_FOLDER),

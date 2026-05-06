@@ -46,6 +46,7 @@ export const KEYS = {
 
   // Last selected session (workspace-scoped via suffix)
   lastSelectedSessionId: 'last-selected-session-id',
+  lastSelectedDay: 'last-selected-day',
 
   // Settings navigation
   lastSettingsSubpage: 'last-settings-subpage',

@@ -55,7 +55,7 @@ import { HeaderIconButton } from "@/components/ui/HeaderIconButton"
 import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipTrigger, TooltipContent, DocumentFormattedMarkdownOverlay } from "@craft-agent/ui"
 import { CaptureInboxList } from "@craft-agent/ui/capture"
-import { DaysListColumn } from "@craft-agent/ui/days"
+import { DaysList } from "@/components/app-shell/DaysList"
 import type { CaptureItem } from "@craft-agent/shared/capture"
 import { todayDateISO } from "@craft-agent/shared/days/date"
 import {
@@ -896,10 +896,12 @@ function AppShellContent({
   }, [activeWorkspaceId])
 
   React.useEffect(() => {
-    if (isDaysNavigation(navState) && navState.dateISO) {
-      addDayToNavigator(navState.dateISO)
-    }
-  }, [addDayToNavigator, navState])
+    if (!activeWorkspaceId) return
+    return window.electronAPI.onDaysChanged((payload) => {
+      if (payload.workspaceId !== activeWorkspaceId) return
+      addDayToNavigator(payload.dateISO)
+    })
+  }, [activeWorkspaceId, addDayToNavigator])
 
 
   // Whether local MCP servers are enabled (affects stdio source status)
@@ -1787,20 +1789,38 @@ function AppShellContent({
 
   const handleDaysClick = useCallback(() => {
     const today = todayDateISO()
+    const selectedDay = activeWorkspaceId
+      ? storage.get(storage.KEYS.lastSelectedDay, today, activeWorkspaceId)
+      : today
     if (activeWorkspaceId) {
       window.electronAPI.ensureDay(activeWorkspaceId, today).then(() => {
         addDayToNavigator(today)
-        navigate(routes.view.days(today))
+        navigate(routes.view.days(selectedDay))
       })
     } else {
       navigate(routes.view.days())
     }
   }, [activeWorkspaceId, addDayToNavigator, navigate])
 
+  const handleTodayClick = useCallback(() => {
+    const today = todayDateISO()
+    if (activeWorkspaceId) {
+      storage.set(storage.KEYS.lastSelectedDay, today, activeWorkspaceId)
+      window.electronAPI.ensureDay(activeWorkspaceId, today).then(() => {
+        addDayToNavigator(today)
+        navigate(routes.view.days(today))
+      })
+    } else {
+      navigate(routes.view.days(today))
+    }
+  }, [activeWorkspaceId, addDayToNavigator, navigate])
+
   const handleDaySelect = useCallback((dateISO: string) => {
-    addDayToNavigator(dateISO)
+    if (activeWorkspaceId) {
+      storage.set(storage.KEYS.lastSelectedDay, dateISO, activeWorkspaceId)
+    }
     navigate(routes.view.days(dateISO))
-  }, [addDayToNavigator, navigate])
+  }, [activeWorkspaceId, navigate])
 
   // Handler for settings view
   const handleSettingsClick = useCallback((subpage: SettingsSubpage = 'app') => {
@@ -3280,7 +3300,7 @@ function AppShellContent({
                     <HeaderIconButton
                       icon={<Calendar className="h-4 w-4" />}
                       tooltip={t("common.today")}
-                      onClick={handleDaysClick}
+                      onClick={handleTodayClick}
                     />
                   )}
                 </>
@@ -3332,9 +3352,10 @@ function AppShellContent({
               />
             )}
             {isDaysNavigation(navState) && (
-              <DaysListColumn
+              <DaysList
                 days={days}
                 selectedDate={navState.dateISO ?? null}
+                workspaceId={activeWorkspaceId ?? undefined}
                 onSelectDay={handleDaySelect}
               />
             )}
