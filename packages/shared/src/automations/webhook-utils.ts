@@ -81,6 +81,29 @@ export function createPromptHistoryEntry(opts: {
 }
 
 /**
+ * Create a history entry for a recovered scheduled firing that was intentionally skipped.
+ */
+export function createSkippedRecoveryEntry(opts: {
+  matcherId: string;
+  scheduledAt: string;
+  recoveredAt: string;
+  recovery: 'soft' | 'none';
+  reason: string;
+}): Record<string, unknown> {
+  return {
+    id: opts.matcherId,
+    ts: Date.now(),
+    ok: true,
+    recovered: false,
+    skipped: true,
+    scheduledAt: opts.scheduledAt,
+    recoveredAt: opts.recoveredAt,
+    recovery: opts.recovery,
+    reason: opts.reason.slice(0, HISTORY_FIELD_MAX_LENGTH),
+  };
+}
+
+/**
  * Return a copy of a WebhookAction with all env-expandable string fields resolved.
  * Used before enqueueing for deferred retry so the retry scheduler doesn't need
  * the original event environment.

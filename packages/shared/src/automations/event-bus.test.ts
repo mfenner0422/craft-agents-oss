@@ -231,11 +231,11 @@ describe('WorkspaceEventBus', () => {
       const handler = jest.fn();
       bus.on('SchedulerTick', handler);
 
-      for (let i = 0; i < 65; i++) {
+      for (let i = 0; i < 7 * 24 * 60 + 1; i++) {
         await bus.emit('SchedulerTick', schedulerPayload());
       }
 
-      expect(handler).toHaveBeenCalledTimes(65);
+      expect(handler).toHaveBeenCalledTimes(7 * 24 * 60);
     });
 
     it('should reset rate window after 60s', async () => {
