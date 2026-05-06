@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react"
 import * as React from "react"
 import { AnimatePresence, motion, type Variants } from "motion/react"
 import { ChevronRight } from "lucide-react"
+import { useDroppable } from "@dnd-kit/core"
 
 import { cn } from "@/lib/utils"
 import {
@@ -79,6 +80,8 @@ export interface LinkItem {
   contextMenu?: SidebarContextMenuConfig
   // Drag-and-drop: flat list reorder (e.g., statuses)
   sortable?: SortableConfig
+  // Drag-and-drop: session drop target (e.g., status, flagged, archived)
+  onSessionDrop?: (sessionId: string) => void
   // Optional element rendered after the title (e.g., label type icon), revealed on hover
   afterTitle?: React.ReactNode
 }
@@ -96,6 +99,7 @@ export const isSeparatorItem = (item: SidebarItem): item is SeparatorItem =>
 interface LeftSidebarProps {
   isCollapsed: boolean
   links: SidebarItem[]
+  sessionDragActive?: boolean
   /** Get props for each item (from unified sidebar navigation) */
   getItemProps?: (id: string) => {
     tabIndex: number
@@ -165,7 +169,7 @@ const itemVariants: Variants = {
  * - Uses @dnd-kit with DragOverlay portaled to document.body (no clipping)
  * - Two-phase drop animation: overlay fades out, ghost fades in
  */
-export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, isNested }: LeftSidebarProps) {
+export function LeftSidebar({ links, isCollapsed, sessionDragActive, getItemProps, focusedItemId, isNested }: LeftSidebarProps) {
   // For nested sidebars, wrap in motion container for stagger effect
   const NavWrapper = isNested ? motion.nav : 'nav'
   const navProps = isNested ? {
@@ -217,7 +221,7 @@ export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, i
 
           // Determine which expanded content to render (sortable vs regular)
           const expandedContent = link.expandable && link.items && link.expanded
-            ? renderExpandedContent(link, getItemProps, focusedItemId, isNested)
+            ? renderExpandedContent(link, getItemProps, focusedItemId, isNested, sessionDragActive)
             : null
 
           // Wrap with context menu if configured, scoped to button only.
@@ -300,10 +304,11 @@ function renderExpandedContent(
   link: LinkItem,
   getItemProps: LeftSidebarProps['getItemProps'],
   focusedItemId: string | null | undefined,
-  isNested: boolean | undefined
+  isNested: boolean | undefined,
+  sessionDragActive: boolean | undefined
 ): React.ReactNode {
   // Flat sortable (e.g., statuses): wrap items in SortableList
-  if (link.sortable && link.items) {
+  if (link.sortable && link.items && !sessionDragActive) {
     // Split at first separator: items before are sortable, items after are trailing (non-sortable)
     const separatorIndex = link.items.findIndex(isSeparatorItem)
     const sortableItems = separatorIndex >= 0 ? link.items.slice(0, separatorIndex) : link.items
@@ -327,6 +332,7 @@ function renderExpandedContent(
     <LeftSidebar
       isCollapsed={false}
       isNested={true}
+      sessionDragActive={sessionDragActive}
       getItemProps={getItemProps}
       focusedItemId={focusedItemId}
       links={link.items!}
@@ -468,6 +474,12 @@ interface SidebarButtonProps {
 // and pass props like data-state="open" directly onto this button element.
 const SidebarButton = React.forwardRef<HTMLButtonElement, SidebarButtonProps & React.ButtonHTMLAttributes<HTMLButtonElement>>(
   ({ link, itemProps, isOverlay, className: extraClassName, ...radixProps }, forwardedRef) => {
+    const droppable = useDroppable({
+      id: `session-target:${link.id}`,
+      disabled: isOverlay || !link.onSessionDrop,
+      data: { type: 'session-target', onSessionDrop: link.onSessionDrop },
+    })
+
     return (
       <button
         {...(isOverlay ? {} : (() => {
@@ -482,6 +494,7 @@ const SidebarButton = React.forwardRef<HTMLButtonElement, SidebarButtonProps & R
           if (typeof forwardedRef === 'function') forwardedRef(el)
           else if (forwardedRef) forwardedRef.current = el
           if (!isOverlay && itemProps?.ref) itemProps.ref(el)
+          droppable.setNodeRef(el)
         }}
         onClick={isOverlay ? undefined : link.onClick}
         data-tutorial={link.dataTutorial}
@@ -495,6 +508,7 @@ const SidebarButton = React.forwardRef<HTMLButtonElement, SidebarButtonProps & R
             ? "bg-foreground/[0.07]"
             // Highlight on hover, context menu open (data-state), or EditPopover active (data-edit-active)
             : "hover:bg-sidebar-hover data-[state=open]:bg-sidebar-hover data-[edit-active=true]:bg-sidebar-hover",
+          droppable.isOver && link.onSessionDrop && "bg-foreground/[0.10] ring-1 ring-inset ring-foreground/20",
           extraClassName,
         )}
       >

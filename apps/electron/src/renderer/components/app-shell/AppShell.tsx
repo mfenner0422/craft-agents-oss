@@ -32,6 +32,16 @@ import {
   Bot,
   Info,
 } from "lucide-react"
+import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core"
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
 import { SourceAvatar } from "@/components/ui/source-avatar"
 import { TopBar } from "./TopBar"
@@ -845,6 +855,11 @@ function AppShellContent({
   } = useAutomations(activeWorkspaceId)
   const [captureItems, setCaptureItems] = React.useState<CaptureItem[]>([])
   const [days, setDays] = React.useState<string[]>([])
+  const [draggedSessionTitle, setDraggedSessionTitle] = React.useState<string | null>(null)
+  const sessionDndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor),
+  )
 
   const addDayToNavigator = React.useCallback((dateISO: string) => {
     setDays(prev => prev.includes(dateISO)
@@ -2247,8 +2262,31 @@ function AppShellContent({
     })
   }, [sessionFilter, labelCounts, activeWorkspace?.id, handleLabelClick, isExpanded, toggleExpanded, openConfigureLabels, handleAddLabel, handleDeleteLabel])
 
+  const handleSessionDragStart = useCallback((event: DragStartEvent) => {
+    const data = event.active.data.current
+    setDraggedSessionTitle(data?.type === 'session' && typeof data.title === 'string' ? data.title : null)
+  }, [])
+
+  const handleSessionDragEnd = useCallback((event: DragEndEvent) => {
+    const activeData = event.active.data.current
+    const overData = event.over?.data.current
+    setDraggedSessionTitle(null)
+    if (activeData?.type !== 'session' || overData?.type !== 'session-target') return
+    const sessionId = typeof activeData.sessionId === 'string' ? activeData.sessionId : null
+    const onSessionDrop = overData.onSessionDrop
+    if (!sessionId || typeof onSessionDrop !== 'function') return
+    if (!sessionMetaMap.has(sessionId)) return
+    onSessionDrop(sessionId)
+  }, [sessionMetaMap])
+
   return (
     <AppShellProvider value={appShellContextValue}>
+      <DndContext
+        sensors={sessionDndSensors}
+        onDragStart={handleSessionDragStart}
+        onDragCancel={() => setDraggedSessionTitle(null)}
+        onDragEnd={handleSessionDragEnd}
+      >
         {/* === TOP BAR === */}
         <TopBar
           workspaces={workspaces}
@@ -2327,6 +2365,7 @@ function AppShellContent({
                 <div className="flex-1 overflow-y-auto min-h-0 mask-fade-bottom pb-4">
                 <LeftSidebar
                   isCollapsed={false}
+                  sessionDragActive={!!draggedSessionTitle}
                   getItemProps={getSidebarItemProps}
                   focusedItemId={focusedSidebarItemId}
                   links={[
@@ -2381,6 +2420,7 @@ function AppShellContent({
                           iconColorable: state.iconColorable,
                           variant: (sessionFilter?.kind === 'state' && sessionFilter.stateId === state.id ? "default" : "ghost") as "default" | "ghost",
                           onClick: () => handleSessionStatusClick(state.id),
+                          onSessionDrop: (sessionId: string) => onSessionStatusChange(sessionId, state.id),
                           contextMenu: {
                             type: 'status' as const,
                             statusId: state.id,
@@ -2397,6 +2437,7 @@ function AppShellContent({
                           icon: <Flag className="h-3.5 w-3.5" />,
                           variant: (sessionFilter?.kind === 'flagged' ? "default" : "ghost") as "default" | "ghost",
                           onClick: handleFlaggedClick,
+                          onSessionDrop: (sessionId: string) => onFlagSession(sessionId),
                         },
                         // Archived (trailing, non-sortable)
                         {
@@ -2406,6 +2447,7 @@ function AppShellContent({
                           icon: Archive,
                           variant: (sessionFilter?.kind === 'archived' ? "default" : "ghost") as "default" | "ghost",
                           onClick: handleArchivedClick,
+                          onSessionDrop: (sessionId: string) => onArchiveSession(sessionId),
                         },
                       ],
                     },
@@ -3645,6 +3687,14 @@ function AppShellContent({
           Mounted here so they survive context-menu / dropdown close. */}
       <MessagingDialogHost />
 
+      <DragOverlay>
+        {draggedSessionTitle ? (
+          <div className="max-w-[280px] truncate rounded-md border border-border bg-background px-3 py-2 text-[13px] shadow-modal-small">
+            {draggedSessionTitle}
+          </div>
+        ) : null}
+      </DragOverlay>
+      </DndContext>
     </AppShellProvider>
   )
 }
