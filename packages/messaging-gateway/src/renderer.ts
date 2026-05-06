@@ -108,6 +108,13 @@ interface CredentialAuthRequestData {
   mode: string
   description?: string
   hint?: string
+  labels?: {
+    credential?: string
+    username?: string
+    password?: string
+  }
+  headerNames?: string[]
+  passwordRequired?: boolean
 }
 
 /**
@@ -116,10 +123,27 @@ interface CredentialAuthRequestData {
  */
 export type CredentialRequestRegistrar = (
   binding: ChannelBinding,
-  requestId: string,
-  mode: string,
-  sourceName: string,
+  request: CredentialAuthRequestData,
 ) => void
+
+function replyInstructionsForCredentialRequest(request: CredentialAuthRequestData): string {
+  if (request.mode === 'basic') {
+    const usernameLabel = request.labels?.username ?? 'username'
+    const passwordLabel = request.labels?.password ?? 'password'
+    if (request.passwordRequired === false) {
+      return `Reply with ${usernameLabel}, or /cancel to skip.`
+    }
+    return `Reply with ${usernameLabel} and ${passwordLabel} on separate lines, or /cancel to skip.`
+  }
+
+  if (request.mode === 'multi-header') {
+    const names = request.headerNames?.length ? request.headerNames.join(', ') : 'the required header names'
+    return `Reply with a JSON object containing ${names}, or /cancel to skip.`
+  }
+
+  const credentialLabel = request.labels?.credential ?? 'credential'
+  return `Reply with your ${credentialLabel}, or /cancel to skip.`
+}
 
 export class Renderer {
   /** Per-binding render state. Keyed by binding.id */
@@ -538,10 +562,10 @@ Approve in the desktop app to continue.`,
     if (request.description) lines.push(request.description)
     if (request.hint) lines.push(`_Hint: ${request.hint}_`)
     lines.push('')
-    lines.push('Reply with your credential, or /cancel to skip.')
+    lines.push(replyInstructionsForCredentialRequest(request))
 
     await adapter.sendText(binding.channelId, lines.join('\n'))
-    this.registerPendingCredential?.(binding, request.requestId, request.mode, request.sourceName)
+    this.registerPendingCredential?.(binding, request)
   }
 
   private async handlePlanSubmitted(

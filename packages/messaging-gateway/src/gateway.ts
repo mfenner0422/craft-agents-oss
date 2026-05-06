@@ -77,11 +77,66 @@ interface PendingCredential {
   requestId: string
   mode: string
   sourceName: string
+  headerNames?: string[]
+  passwordRequired?: boolean
   channelId: string
   platform: PlatformType
 }
 
 const COMPACT_ACCEPT_TTL_MS = 10 * 60 * 1000
+
+function parseCredentialReply(text: string, pending: PendingCredential): CredentialResponse {
+  if (pending.mode === 'basic') {
+    if (text.startsWith('{')) {
+      const parsed = JSON.parse(text) as { username?: unknown; password?: unknown }
+      if (typeof parsed.username !== 'string') throw new Error('Missing username')
+      if (pending.passwordRequired !== false && typeof parsed.password !== 'string') {
+        throw new Error('Missing password')
+      }
+      return {
+        type: 'credential',
+        cancelled: false,
+        username: parsed.username,
+        password: typeof parsed.password === 'string' ? parsed.password : '',
+      }
+    }
+
+    const [username, ...passwordLines] = text.includes('\n')
+      ? text.split(/\r?\n/)
+      : text.split(':')
+    const password = passwordLines.join(text.includes('\n') ? '\n' : ':')
+    if (!username?.trim()) throw new Error('Missing username')
+    if (pending.passwordRequired !== false && !password) throw new Error('Missing password')
+    return {
+      type: 'credential',
+      cancelled: false,
+      username: username.trim(),
+      password,
+    }
+  }
+
+  if (pending.mode === 'multi-header') {
+    const parsed = JSON.parse(text) as Record<string, unknown>
+    const headers: Record<string, string> = {}
+    for (const [key, value] of Object.entries(parsed)) {
+      if (typeof value === 'string') headers[key] = value
+    }
+    const missing = (pending.headerNames ?? []).filter((name) => !headers[name])
+    if (missing.length > 0) throw new Error(`Missing headers: ${missing.join(', ')}`)
+    if (Object.keys(headers).length === 0) throw new Error('Missing headers')
+    return {
+      type: 'credential',
+      cancelled: false,
+      headers,
+    }
+  }
+
+  return {
+    type: 'credential',
+    cancelled: false,
+    value: text,
+  }
+}
 
 export class MessagingGateway {
   private readonly sessionManager: ISessionManager
@@ -128,12 +183,14 @@ export class MessagingGateway {
     )
     this.planTokens = new PlanTokenRegistry()
 
-    const registerPendingCredential: CredentialRequestRegistrar = (binding, requestId, mode, sourceName) => {
+    const registerPendingCredential: CredentialRequestRegistrar = (binding, request) => {
       this.pendingCredentials.set(binding.channelId, {
         sessionId: binding.sessionId,
-        requestId,
-        mode,
-        sourceName,
+        requestId: request.requestId,
+        mode: request.mode,
+        sourceName: request.sourceName,
+        headerNames: request.headerNames,
+        passwordRequired: request.passwordRequired,
         channelId: binding.channelId,
         platform: binding.platform,
       })
@@ -320,7 +377,7 @@ export class MessagingGateway {
     const text = msg.text.trim()
 
     if (text === '/cancel') {
-      await this.sessionManager.handleCredentialInput(pending.sessionId, pending.requestId, {
+      await this.sessionManager.respondToCredential(pending.sessionId, pending.requestId, {
         type: 'credential',
         cancelled: true,
       } as CredentialResponse)
@@ -328,17 +385,16 @@ export class MessagingGateway {
       return
     }
 
-    const response: CredentialResponse = {
-      type: 'credential',
-      cancelled: false,
-      value: text,
-    }
-
     try {
-      await this.sessionManager.handleCredentialInput(pending.sessionId, pending.requestId, response)
+      const response = parseCredentialReply(text, pending)
+      const accepted = await this.sessionManager.respondToCredential(pending.sessionId, pending.requestId, response)
+      if (!accepted) {
+        await adapter.sendText(msg.channelId, '❌ Credential request expired. Please retry the source action.')
+        return
+      }
       await adapter.sendText(msg.channelId, `✅ Credential saved for *${pending.sourceName}*. Agent resuming.`)
     } catch (err) {
-      this.log.error('handleCredentialInput failed', {
+      this.log.error('respondToCredential failed', {
         event: 'credential_input_failed',
         sessionId: pending.sessionId,
         error: err,

@@ -443,6 +443,94 @@ describe('Renderer — permissions and errors', () => {
   })
 })
 
+describe('Renderer — Telegram credential prompts', () => {
+  it('sends a bearer credential prompt and registers the pending request', async () => {
+    const registrations: unknown[] = []
+    const renderer = new Renderer({
+      registerPendingCredential(binding, request) {
+        registrations.push({ binding, request })
+      },
+    })
+    const adapter = makeAdapter()
+    const binding = makeBinding()
+
+    await renderer.handle(
+      {
+        type: 'auth_request',
+        sessionId: 's',
+        request: {
+          type: 'credential',
+          requestId: 'cred-1',
+          sourceName: 'GitHub',
+          mode: 'bearer',
+          labels: { credential: 'PAT' },
+          hint: 'Use the Rocky vault item.',
+        },
+      } as SessionEvent,
+      binding,
+      adapter,
+    )
+
+    const sends = adapter.calls.filter((c) => c.kind === 'sendText')
+    expect(sends).toHaveLength(1)
+    expect(sends[0]!.text).toContain('Authentication required')
+    expect(sends[0]!.text).toContain('GitHub')
+    expect(sends[0]!.text).toContain('Reply with your PAT')
+    expect(registrations).toHaveLength(1)
+  })
+
+  it('explains basic-auth replies as two lines', async () => {
+    const renderer = new Renderer({ registerPendingCredential() {} })
+    const adapter = makeAdapter()
+    const binding = makeBinding()
+
+    await renderer.handle(
+      {
+        type: 'auth_request',
+        sessionId: 's',
+        request: {
+          type: 'credential',
+          requestId: 'cred-1',
+          sourceName: 'Private API',
+          mode: 'basic',
+          labels: { username: 'user', password: 'secret' },
+        },
+      } as SessionEvent,
+      binding,
+      adapter,
+    )
+
+    const sends = adapter.calls.filter((c) => c.kind === 'sendText')
+    expect(sends[0]!.text).toContain('user and secret on separate lines')
+  })
+
+  it('explains multi-header replies as JSON with required headers', async () => {
+    const renderer = new Renderer({ registerPendingCredential() {} })
+    const adapter = makeAdapter()
+    const binding = makeBinding()
+
+    await renderer.handle(
+      {
+        type: 'auth_request',
+        sessionId: 's',
+        request: {
+          type: 'credential',
+          requestId: 'cred-1',
+          sourceName: 'Datadog',
+          mode: 'multi-header',
+          headerNames: ['DD-API-KEY', 'DD-APPLICATION-KEY'],
+        },
+      } as SessionEvent,
+      binding,
+      adapter,
+    )
+
+    const sends = adapter.calls.filter((c) => c.kind === 'sendText')
+    expect(sends[0]!.text).toContain('JSON object')
+    expect(sends[0]!.text).toContain('DD-API-KEY, DD-APPLICATION-KEY')
+  })
+})
+
 
 describe('Renderer — WhatsApp desktop-only approvals', () => {
   it('permission_request on WhatsApp sends an informational desktop-only message', async () => {

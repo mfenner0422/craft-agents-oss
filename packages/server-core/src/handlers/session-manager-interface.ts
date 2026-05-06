@@ -220,7 +220,6 @@ export interface ISessionManager {
 
   reinitializeAuth(connectionSlug?: string): Promise<void>
   completeAuthRequest(sessionId: string, result: AuthResult): Promise<void>
-  handleCredentialInput(sessionId: string, requestId: string, response: CredentialResponse): Promise<void>
   executePromptAutomation(
     workspaceId: string,
     workspaceRootPath: string,
