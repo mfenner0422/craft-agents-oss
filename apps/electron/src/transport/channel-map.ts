@@ -182,6 +182,7 @@ export const CHANNEL_MAP = {
   saveCapture: invoke(RPC_CHANNELS.capture.SAVE),
   listCaptureInbox: invoke(RPC_CHANNELS.capture.LIST),
   deleteCapture: invoke(RPC_CHANNELS.capture.DELETE),
+  promoteCapture: invoke(RPC_CHANNELS.capture.PROMOTE),
   enrichCaptureUrl: invoke(RPC_CHANNELS.capture.ENRICH_URL),
   openCaptureWindow: invoke(RPC_CHANNELS.capture.OPEN),
   onCaptureSaved: listener(RPC_CHANNELS.capture.SAVED),
@@ -193,7 +194,14 @@ export const CHANNEL_MAP = {
   pullForwardDayTasks: invoke(RPC_CHANNELS.days.PULL_FORWARD),
   updateDayFile: invoke(RPC_CHANNELS.days.UPDATE_FILE),
   updateDayTaskLists: invoke(RPC_CHANNELS.days.UPDATE_TASK_LISTS),
+  moveDayTask: invoke(RPC_CHANNELS.days.MOVE_TASK),
   onDaysChanged: listener(RPC_CHANNELS.days.CHANGED),
+  listTasks: invoke(RPC_CHANNELS.tasks.LIST),
+  getTask: invoke(RPC_CHANNELS.tasks.GET),
+  createTask: invoke(RPC_CHANNELS.tasks.CREATE),
+  updateTask: invoke(RPC_CHANNELS.tasks.UPDATE),
+  promoteTask: invoke(RPC_CHANNELS.tasks.PROMOTE),
+  onTasksChanged: listener(RPC_CHANNELS.tasks.CHANGED),
 
   // Folder dialog
   openFolderDialog: invoke(RPC_CHANNELS.dialog.OPEN_FOLDER),

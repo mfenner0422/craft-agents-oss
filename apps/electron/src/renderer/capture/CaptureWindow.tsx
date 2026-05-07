@@ -1,7 +1,9 @@
 import React, { useCallback, useMemo, useState } from 'react'
 import ReactDOM from 'react-dom/client'
-import { Save, X } from 'lucide-react'
+import { Inbox, Calendar, Layers, X } from 'lucide-react'
 import '../index.css'
+
+type CaptureTarget = 'inbox' | 'next' | 'someday'
 
 function getWorkspaceId(): string {
   return new URLSearchParams(window.location.search).get('workspaceId') ?? ''
@@ -15,20 +17,21 @@ function CaptureWindow() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const hasUrlOrTitle = !!(url.trim() || title.trim())
+  const hasContent = !!(url.trim() || title.trim() || body.trim())
 
-  const save = useCallback(async () => {
-    if (!workspaceId || saving || !hasUrlOrTitle) return
+  const save = useCallback(async (target: CaptureTarget) => {
+    if (!workspaceId || saving || !hasContent) return
     setSaving(true)
     setError(null)
     try {
+      const tags: string[] = target === 'inbox' ? [] : [target, 'triaged']
       await window.electronAPI.saveCapture({
         workspaceId,
         source: 'global-hotkey',
         url: url.trim() || undefined,
         title: title.trim() || undefined,
-        body: body.trim() || url.trim() || title.trim(),
-        tags: [],
+        body: body.trim(),
+        tags,
       })
       window.close()
     } catch (err) {
@@ -36,7 +39,7 @@ function CaptureWindow() {
     } finally {
       setSaving(false)
     }
-  }, [body, hasUrlOrTitle, saving, title, url, workspaceId])
+  }, [body, hasContent, saving, title, url, workspaceId])
 
   return (
     <main className="h-screen w-screen bg-background text-foreground border border-border/60 shadow-strong">
@@ -72,19 +75,60 @@ function CaptureWindow() {
           placeholder="Note"
         />
         {error && <div className="text-[12px] text-destructive">{error}</div>}
-        <div className="flex justify-end">
-          <button
-            type="button"
-            className="h-8 px-3 inline-flex items-center gap-2 rounded-md bg-primary text-primary-foreground text-[13px] disabled:opacity-50"
-            disabled={saving || !hasUrlOrTitle}
-            onClick={save}
-          >
-            <Save className="h-4 w-4" />
-            {saving ? 'Saving' : 'Save'}
-          </button>
+        <div className="flex items-center justify-end gap-1.5">
+          <SaveButton
+            label="Inbox"
+            icon={<Inbox className="h-3.5 w-3.5" />}
+            onClick={() => save('inbox')}
+            disabled={saving || !hasContent}
+            variant="secondary"
+          />
+          <SaveButton
+            label="Someday"
+            icon={<Layers className="h-3.5 w-3.5" />}
+            onClick={() => save('someday')}
+            disabled={saving || !hasContent}
+            variant="secondary"
+          />
+          <SaveButton
+            label="Next"
+            icon={<Calendar className="h-3.5 w-3.5" />}
+            onClick={() => save('next')}
+            disabled={saving || !hasContent}
+            variant="primary"
+          />
         </div>
       </section>
     </main>
+  )
+}
+
+function SaveButton({
+  label,
+  icon,
+  onClick,
+  disabled,
+  variant,
+}: {
+  label: string
+  icon: React.ReactNode
+  onClick: () => void
+  disabled: boolean
+  variant: 'primary' | 'secondary'
+}) {
+  const className = variant === 'primary'
+    ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+    : 'border border-border bg-background hover:bg-foreground/[0.05]'
+  return (
+    <button
+      type="button"
+      className={`h-8 px-2.5 inline-flex items-center gap-1.5 rounded-md text-[12px] disabled:opacity-50 ${className}`}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {icon}
+      {label}
+    </button>
   )
 }
 

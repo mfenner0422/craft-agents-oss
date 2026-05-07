@@ -35,7 +35,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'automations' | 'settings' | 'capture' | 'days'
+export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'automations' | 'settings' | 'capture' | 'days' | 'tasks'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -61,7 +61,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 const COMPOUND_ROUTE_PREFIXES = [
-  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'automations', 'settings', 'capture', 'days'
+  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'automations', 'settings', 'capture', 'days', 'tasks'
 ]
 const DAY_ISO_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
@@ -114,7 +114,17 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
 
   if (first === 'days') {
     const dateISO = segments[1]
+    if (dateISO === 'triage') return { navigator: 'days', details: { type: 'triage', id: 'triage' } }
     return { navigator: 'days', details: dateISO && DAY_ISO_PATTERN.test(dateISO) ? { type: 'day', id: dateISO } : null }
+  }
+
+  if (first === 'tasks') {
+    const group = segments[1]
+    const valid = ['all', 'today', 'lingering', 'next', 'someday', 'completed', 'canceled']
+    if (group && valid.includes(group)) {
+      return { navigator: 'tasks', details: { type: 'group', id: group } }
+    }
+    return { navigator: 'tasks', details: null }
   }
 
   // Sources navigator - supports type filters (api, mcp, local)
@@ -305,7 +315,13 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
 
   if (parsed.navigator === 'days') {
     if (!parsed.details) return 'days'
+    if (parsed.details.type === 'triage') return 'days/triage'
     return `days/${parsed.details.id}`
+  }
+
+  if (parsed.navigator === 'tasks') {
+    if (parsed.details?.type === 'group') return `tasks/${parsed.details.id}`
+    return 'tasks'
   }
 
   // Sessions navigator
@@ -439,6 +455,11 @@ function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute 
   if (compound.navigator === 'days') {
     if (!compound.details) return { type: 'view', name: 'days', params: {} }
     return { type: 'view', name: 'days', id: compound.details.id, params: {} }
+  }
+
+  if (compound.navigator === 'tasks') {
+    if (compound.details?.type === 'group') return { type: 'view', name: 'tasks', id: compound.details.id, params: {} }
+    return { type: 'view', name: 'tasks', params: {} }
   }
 
   // Sessions
@@ -584,7 +605,18 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
   if (compound.navigator === 'days') {
     return {
       navigator: 'days',
-      dateISO: compound.details?.id,
+      details: compound.details?.type === 'triage'
+        ? { type: 'triage' }
+        : compound.details?.type === 'day'
+        ? { type: 'day', id: compound.details.id }
+        : null,
+    }
+  }
+
+  if (compound.navigator === 'tasks') {
+    return {
+      navigator: 'tasks',
+      details: compound.details?.type === 'group' ? { type: 'group', id: compound.details.id as 'all' | 'today' | 'lingering' | 'next' | 'someday' | 'completed' | 'canceled' } : null,
     }
   }
 
@@ -659,7 +691,15 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
     case 'capture-item':
       return parsed.id ? { navigator: 'capture', details: { type: 'item', id: parsed.id } } : { navigator: 'capture', details: null }
     case 'days':
-      return { navigator: 'days', dateISO: parsed.id && DAY_ISO_PATTERN.test(parsed.id) ? parsed.id : undefined }
+      return {
+        navigator: 'days',
+        details: parsed.id && DAY_ISO_PATTERN.test(parsed.id) ? { type: 'day', id: parsed.id } : null,
+      }
+    case 'tasks':
+      return {
+        navigator: 'tasks',
+        details: parsed.id ? { type: 'group', id: parsed.id as 'all' | 'today' | 'lingering' | 'next' | 'someday' | 'completed' | 'canceled' } : null,
+      }
     case 'automation-info':
       if (parsed.id) {
         return {
@@ -784,9 +824,15 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
   }
 
   if (state.navigator === 'days') {
+    if (!state.details) return { navigator: 'days', details: null }
+    if (state.details.type === 'triage') return { navigator: 'days', details: { type: 'triage', id: 'triage' } }
+    return { navigator: 'days', details: { type: 'day', id: state.details.id } }
+  }
+
+  if (state.navigator === 'tasks') {
     return {
-      navigator: 'days',
-      details: state.dateISO ? { type: 'day', id: state.dateISO } : null,
+      navigator: 'tasks',
+      details: state.details?.type === 'group' ? { type: 'group', id: state.details.id } : null,
     }
   }
 

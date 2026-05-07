@@ -206,6 +206,9 @@ function validateWorkspaceRuntimeConfig(config: import('../workspaces/types.ts')
   if (config.vault?.path !== undefined && typeof config.vault.path !== 'string') {
     issues.push({ field: 'vault.path', message: 'Vault path must be a string' });
   }
+  if (config.vault?.externalSyncEnabled !== undefined && typeof config.vault.externalSyncEnabled !== 'boolean') {
+    issues.push({ field: 'vault.externalSyncEnabled', message: 'Vault external sync enabled must be boolean' });
+  }
   if (config.days?.morningTime !== undefined && !timePattern.test(String(config.days.morningTime))) {
     issues.push({ field: 'days.morningTime', message: 'Morning time must use HH:MM format' });
   }

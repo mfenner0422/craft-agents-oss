@@ -16,6 +16,8 @@ export class CaptureManager {
   private readonly getWorkspaceForWindow: (webContentsId: number) => string | null
   private readonly openCaptureWindow: (workspaceId: string) => void
   private readonly mruWorkspaceIds: string[] = []
+  private lastFocusedWebContentsId: number | null = null
+  private activeWorkspaceId: string | null = null
   private bound = false
   private trackingInstalled = false
 
@@ -43,6 +45,11 @@ export class CaptureManager {
       return result
     }
     return { ok: true }
+  }
+
+  setActiveWorkspaceId(workspaceId: string): void {
+    this.activeWorkspaceId = workspaceId
+    this.rememberWorkspace(workspaceId)
   }
 
   refreshTargetWorkspaces(): void {
@@ -97,6 +104,7 @@ export class CaptureManager {
   }
 
   private rememberWindow(window: BrowserWindow): void {
+    this.lastFocusedWebContentsId = window.webContents.id
     const workspaceId = this.getWorkspaceForWindow(window.webContents.id)
     if (!workspaceId) return
     this.rememberWorkspace(workspaceId)
@@ -109,12 +117,25 @@ export class CaptureManager {
   }
 
   private resolveTargetWorkspaceId(): string | null {
+    if (this.activeWorkspaceId) {
+      return this.activeWorkspaceId
+    }
+
     const focused = BrowserWindow.getFocusedWindow()
     if (focused) {
       const focusedWorkspaceId = this.getWorkspaceForWindow(focused.webContents.id)
       if (focusedWorkspaceId && this.isCaptureEnabled(focusedWorkspaceId)) {
+        this.lastFocusedWebContentsId = focused.webContents.id
         this.rememberWorkspace(focusedWorkspaceId)
         return focusedWorkspaceId
+      }
+    }
+
+    if (this.lastFocusedWebContentsId != null) {
+      const lastFocusedWorkspaceId = this.getWorkspaceForWindow(this.lastFocusedWebContentsId)
+      if (lastFocusedWorkspaceId && this.isCaptureEnabled(lastFocusedWorkspaceId)) {
+        this.rememberWorkspace(lastFocusedWorkspaceId)
+        return lastFocusedWorkspaceId
       }
     }
 

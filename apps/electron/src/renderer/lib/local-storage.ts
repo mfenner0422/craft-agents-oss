@@ -22,6 +22,7 @@ export const KEYS = {
   collapsedSidebarItems: 'collapsed-sidebar-items',
   chatGroupingMode: 'chat-grouping-mode', // How to group chats: 'date' | 'status'
   collapsedSessionGroups: 'collapsed-session-groups', // Collapsed group keys in session list
+  collapsedDayGroups: 'collapsed-day-groups', // Collapsed week-group keys in days list
   collapsedCaptureGroups: 'collapsed-capture-groups', // Collapsed group keys in capture list (workspace-scoped)
 
   // Focus mode
@@ -48,6 +49,7 @@ export const KEYS = {
   // Last selected session (workspace-scoped via suffix)
   lastSelectedSessionId: 'last-selected-session-id',
   lastSelectedDay: 'last-selected-day',
+  lastTriageShown: 'last-triage-shown',
   lastSelectedCaptureId: 'last-selected-capture-id',
 
   // Settings navigation

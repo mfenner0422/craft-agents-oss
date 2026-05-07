@@ -29,6 +29,7 @@ export interface LocalMcpConfig {
 
 export interface VaultConfig {
   path?: string;
+  externalSyncEnabled?: boolean;
 }
 
 export interface DaysConfig {

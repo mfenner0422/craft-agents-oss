@@ -56,6 +56,12 @@ export const RPC_CHANNELS = {
   },
   tasks: {
     GET_OUTPUT: 'tasks:getOutput',
+    LIST: 'tasks:list',
+    GET: 'tasks:get',
+    CREATE: 'tasks:create',
+    UPDATE: 'tasks:update',
+    PROMOTE: 'tasks:promote',
+    CHANGED: 'tasks:changed',
   },
   workspaces: {
     GET: 'workspaces:get',
@@ -264,6 +270,7 @@ export const RPC_CHANNELS = {
     SAVE: 'capture:save',
     LIST: 'capture:list',
     DELETE: 'capture:delete',
+    PROMOTE: 'capture:promote',
     ENRICH_URL: 'capture:enrichUrl',
     SAVED: 'capture:saved',
     OPEN: 'capture:open',
@@ -277,6 +284,7 @@ export const RPC_CHANNELS = {
     PULL_FORWARD: 'days:pullForward',
     UPDATE_FILE: 'days:updateFile',
     UPDATE_TASK_LISTS: 'days:updateTaskLists',
+    MOVE_TASK: 'days:moveTask',
     CHANGED: 'days:changed',
   },
   permissions: {

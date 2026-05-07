@@ -18,6 +18,7 @@ import {
   writeSharedTaskList,
 } from '../store.ts';
 import { addDays, formatLocalDateISO, parseDateISO } from '../date.ts';
+import { createTask, getTask } from '../../tasks/store.ts';
 
 const tempDirs: string[] = [];
 
@@ -144,13 +145,15 @@ describe('days store', () => {
     expect(readFileSync(join(vaultRoot, 'daily', 'someday.md'), 'utf-8')).toBe('# Someday\n\n- [>] Later <!-- task:s1 -->\n');
   });
 
-  it('rewrites legacy daily checklist into managed Today format on board save', () => {
+  it('updateTaskLists is a slot-and-membership reconciler over canonical tasks', () => {
     const vaultRoot = tempVault();
-    mkdirSync(join(vaultRoot, 'daily', '2026-05-06'), { recursive: true });
-    writeFileSync(join(vaultRoot, 'daily', '2026-05-06', 'tasks.md'), '# Tasks\n\n- [ ] Legacy <!-- task:old -->\n', 'utf-8');
-    const board = ensureBoard(vaultRoot, '2026-05-06');
-    updateTaskLists(vaultRoot, '2026-05-06', board.tasks);
-    expect(readFileSync(join(vaultRoot, 'daily', '2026-05-06', 'tasks.md'), 'utf-8')).toBe('# Today\n\n- [ ] Legacy <!-- task:old -->\n');
+    // Renderer creates canonical tasks via tasks.create *before* asking the server to reorder.
+    const a = createTask(vaultRoot, { id: 'a', title: 'A', day: '2026-05-06', slot: 1 });
+    const b = createTask(vaultRoot, { id: 'b', title: 'B', day: '2026-05-06', slot: 2 });
+    ensureBoard(vaultRoot, '2026-05-06');
+    updateTaskLists(vaultRoot, '2026-05-06', { today: [b.id, a.id] });
+    const file = readFileSync(join(vaultRoot, 'daily', '2026-05-06', 'tasks.md'), 'utf-8');
+    expect(file.indexOf('task:b')).toBeLessThan(file.indexOf('task:a'));
   });
 
   it('carries forward only active yesterday Today tasks', () => {
@@ -178,5 +181,25 @@ describe('days store', () => {
     expect(target).not.toContain('task:d');
     expect(target).not.toContain('task:e');
     expect(target).not.toContain('task:n1');
+  });
+
+  it('pulls canonical tasks forward by moving the same task and recording provenance', () => {
+    const vaultRoot = tempVault();
+    createTask(vaultRoot, {
+      id: 'canonical',
+      title: 'Move me',
+      day: '2026-05-05',
+      slot: 1,
+      list: null,
+      created_at: '2026-05-05T08:00:00.000Z',
+      updated_at: '2026-05-05T08:00:00.000Z',
+    });
+    pullForwardTasks(vaultRoot, '2026-05-05', '2026-05-06');
+    const task = getTask(vaultRoot, 'canonical');
+    expect(task?.day).toBe('2026-05-06');
+    expect(task?.created_at).toBe('2026-05-05T08:00:00.000Z');
+    expect(task?.committed_history).toHaveLength(2);
+    expect(readFileSync(join(vaultRoot, 'daily', '2026-05-06', 'tasks.md'), 'utf-8')).toContain('task:canonical');
+    expect(readFileSync(join(vaultRoot, 'daily', '2026-05-05', 'tasks.md'), 'utf-8')).not.toContain('task:canonical');
   });
 });

@@ -22,6 +22,7 @@ export interface CaptureItem {
   url?: string;
   title?: string;
   tags: string[];
+  triagedAt?: string;
   body: string;
 }
 
@@ -76,7 +77,9 @@ export function captureItem(input: CaptureItemInput): CaptureItem {
   };
 }
 
-export function listInboxItems(vaultRoot: string, limit = 100): CaptureItem[] {
+export function listInboxItems(vaultRoot: string, limitOrOptions: number | { limit?: number; untriagedOnly?: boolean } = 100): CaptureItem[] {
+  const limit = typeof limitOrOptions === 'number' ? limitOrOptions : limitOrOptions.limit ?? 100;
+  const untriagedOnly = typeof limitOrOptions === 'object' && limitOrOptions.untriagedOnly === true;
   const inboxDir = join(vaultRoot, 'inbox');
   if (!existsSync(inboxDir)) return [];
   return readdirSync(inboxDir)
@@ -94,9 +97,20 @@ export function listInboxItems(vaultRoot: string, limit = 100): CaptureItem[] {
         ...(typeof doc.data.url === 'string' ? { url: doc.data.url } : {}),
         ...(typeof doc.data.title === 'string' ? { title: doc.data.title } : {}),
         tags: Array.isArray(doc.data.tags) ? doc.data.tags.map(String) : [],
+        ...(typeof doc.data.triaged_at === 'string' ? { triagedAt: doc.data.triaged_at } : {}),
         body: doc.content,
       };
-    });
+    })
+    .filter(item => !untriagedOnly || !item.triagedAt);
+}
+
+export function markCaptureTriaged(vaultRoot: string, itemId: string, now = new Date()): CaptureItem {
+  const item = readCaptureItem(vaultRoot, itemId);
+  if (!item) throw new Error(`Capture item not found: ${itemId}`);
+  const doc = readMarkdown(item.filePath);
+  const triagedAt = now.toISOString();
+  writeMarkdown(item.filePath, { ...doc.data, triaged_at: triagedAt }, doc.content);
+  return { ...item, triagedAt };
 }
 
 export function deleteCaptureItem(vaultRoot: string, itemId: string): void {
@@ -127,6 +141,29 @@ export function deleteCaptureItem(vaultRoot: string, itemId: string): void {
   }
 
   unlinkSync(resolvedFile);
+}
+
+function readCaptureItem(vaultRoot: string, itemId: string): CaptureItem | null {
+  const inboxDir = join(vaultRoot, 'inbox');
+  if (!existsSync(inboxDir)) return null;
+  for (const name of readdirSync(inboxDir).filter(name => name.endsWith('.md'))) {
+    const filePath = join(inboxDir, name);
+    const doc = readMarkdown(filePath);
+    const id = String(doc.data.id ?? name.replace(/\.md$/, ''));
+    if (id !== itemId) continue;
+    return {
+      id,
+      filePath,
+      capturedAt: String(doc.data.captured_at ?? ''),
+      source: String(doc.data.source ?? 'manual'),
+      ...(typeof doc.data.url === 'string' ? { url: doc.data.url } : {}),
+      ...(typeof doc.data.title === 'string' ? { title: doc.data.title } : {}),
+      tags: Array.isArray(doc.data.tags) ? doc.data.tags.map(String) : [],
+      ...(typeof doc.data.triaged_at === 'string' ? { triagedAt: doc.data.triaged_at } : {}),
+      body: doc.content,
+    };
+  }
+  return null;
 }
 
 export interface EnrichResult {
@@ -194,4 +231,3 @@ function formatTimestamp(date: Date): string {
   const pad = (value: number) => String(value).padStart(2, '0');
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
 }
-

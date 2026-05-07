@@ -97,6 +97,7 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
 
     // Keep WS push routing in sync (works for both GUI and headless)
     server.updateClientWorkspace?.(ctx.clientId, workspaceId)
+    deps.onWorkspaceSwitched?.(workspaceId)
 
     if (windowManager) {
       const wcId = ctx.webContentsId!

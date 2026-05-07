@@ -57,6 +57,7 @@ import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipTrigger, TooltipContent, DocumentFormattedMarkdownOverlay } from "@craft-agent/ui"
 import { CaptureListPanel } from "@/components/app-shell/CaptureListPanel"
 import { DaysList } from "@/components/app-shell/DaysList"
+import { TasksListPanel } from "@/components/app-shell/TasksListPanel"
 import { createDaysTrayNavigateHandler } from "@/days-tray/navigation"
 import type { CaptureItem } from "@craft-agent/shared/capture"
 import { todayDateISO } from "@craft-agent/shared/days/date"
@@ -130,6 +131,7 @@ import {
   isAutomationsNavigation,
   isCaptureNavigation,
   isDaysNavigation,
+  isTasksNavigation,
   type NavigationState,
 } from "@/contexts/NavigationContext"
 import type { SettingsSubpage } from "../../../shared/types"
@@ -882,10 +884,14 @@ function AppShellContent({
     if (!activeWorkspaceId) return
     return window.electronAPI.onCaptureSaved((payload) => {
       if (payload.workspaceId !== activeWorkspaceId) return
-      setCaptureItems(prev => {
-        const withoutSaved = prev.filter(item => item.id !== payload.item.id)
-        return [payload.item, ...withoutSaved]
-      })
+      window.electronAPI.listCaptureInbox(activeWorkspaceId)
+        .then(setCaptureItems)
+        .catch(() => {
+          setCaptureItems(prev => {
+            const withoutSaved = prev.filter(item => item.id !== payload.item.id)
+            return [payload.item, ...withoutSaved]
+          })
+        })
     })
   }, [activeWorkspaceId])
 
@@ -1851,6 +1857,10 @@ function AppShellContent({
     navigate(routes.view.days(dateISO))
   }, [activeWorkspaceId, navigate])
 
+  const handleTasksClick = useCallback(() => {
+    navigate(routes.view.tasks())
+  }, [navigate])
+
   // Handler for settings view
   const handleSettingsClick = useCallback((subpage: SettingsSubpage = 'app') => {
     navigate(routes.view.settings(subpage))
@@ -2243,6 +2253,7 @@ function AppShellContent({
 
     if (isCaptureNavigation(navState)) return t("sidebar.capture")
     if (isDaysNavigation(navState)) return t("sidebar.days")
+    if (isTasksNavigation(navState)) return "Tasks"
 
     // Settings navigator
     if (isSettingsNavigation(navState)) return t("sidebar.settings")
@@ -2529,7 +2540,7 @@ function AppShellContent({
                       id: "nav:vault",
                       title: t("sidebar.vault"),
                       icon: BookOpenText,
-                      variant: (isDaysNavigation(navState) || isCaptureNavigation(navState)) ? "default" : "ghost",
+                      variant: (isDaysNavigation(navState) || isCaptureNavigation(navState) || isTasksNavigation(navState)) ? "default" : "ghost",
                       expandable: true,
                       expanded: isExpanded('nav:vault'),
                       onToggle: () => toggleExpanded('nav:vault'),
@@ -2549,6 +2560,13 @@ function AppShellContent({
                           icon: Calendar,
                           variant: isDaysNavigation(navState) ? "default" : "ghost",
                           onClick: handleDaysClick,
+                        },
+                        {
+                          id: "nav:tasks",
+                          title: "Tasks",
+                          icon: ListTodo,
+                          variant: isTasksNavigation(navState) ? "default" : "ghost",
+                          onClick: handleTasksClick,
                         },
                       ],
                     },
@@ -3394,9 +3412,16 @@ function AppShellContent({
             {isDaysNavigation(navState) && (
               <DaysList
                 days={days}
-                selectedDate={navState.dateISO ?? null}
+                selectedDate={navState.details?.type === 'day' ? navState.details.id : null}
                 workspaceId={activeWorkspaceId ?? undefined}
                 onSelectDay={handleDaySelect}
+              />
+            )}
+            {isTasksNavigation(navState) && (
+              <TasksListPanel
+                workspaceId={activeWorkspaceId ?? null}
+                selectedGroup={navState.details?.type === 'group' ? navState.details.id : null}
+                onSelectGroup={(group) => navigate(routes.view.tasks(group))}
               />
             )}
             {isSettingsNavigation(navState) && (

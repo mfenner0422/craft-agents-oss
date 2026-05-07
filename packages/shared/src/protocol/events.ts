@@ -7,6 +7,7 @@ import type { ThemeOverrides } from '../config/index'
 import type { CaptureItem } from '../capture/store'
 import type { LoadedSource } from '../sources/types'
 import type { LoadedSkill } from '../skills/types'
+import type { TaskRecord } from '../tasks/types'
 import { RPC_CHANNELS } from './channels'
 import type {
   SessionEvent,
@@ -32,6 +33,7 @@ export interface BroadcastEventMap {
   [RPC_CHANNELS.permissions.DEFAULTS_CHANGED]: [value: null]
   [RPC_CHANNELS.capture.SAVED]: [payload: { workspaceId: string; item: CaptureItem }]
   [RPC_CHANNELS.days.CHANGED]: [payload: { workspaceId: string; dateISO: string }]
+  [RPC_CHANNELS.tasks.CHANGED]: [payload: { workspaceId: string; task: TaskRecord }]
 
   // Theme broadcasts (global)
   [RPC_CHANNELS.theme.APP_CHANGED]: [theme: ThemeOverrides | null]

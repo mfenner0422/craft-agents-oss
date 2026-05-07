@@ -27,4 +27,5 @@ export interface HandlerDeps<
   browserPaneManager?: TBrowserPaneManager
   oauthFlowStore: TOAuthFlowStore
   messagingRegistry?: IMessagingGatewayRegistry
+  onWorkspaceSwitched?: (workspaceId: string) => void
 }

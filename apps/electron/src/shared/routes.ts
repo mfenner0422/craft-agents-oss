@@ -188,6 +188,9 @@ export const routes = {
 
     days: (dateISO?: string) =>
       dateISO ? `days/${dateISO}` as const : 'days' as const,
+    daysTriage: () => 'days/triage' as const,
+
+    tasks: (group?: string) => (group ? `tasks/${group}` as const : 'tasks' as const),
   },
 } as const
 

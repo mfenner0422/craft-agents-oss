@@ -673,6 +673,7 @@ app.whenReady().then(async () => {
             browserPaneManager: browserPaneManager ?? undefined,
             oauthFlowStore: ofs,
             messagingRegistry: messagingHandle.registry,
+            onWorkspaceSwitched: (workspaceId: string) => captureManager?.setActiveWorkspaceId(workspaceId),
           }
         },
         // Headless: register only core handlers (no GUI handlers for browser, settings, etc.)

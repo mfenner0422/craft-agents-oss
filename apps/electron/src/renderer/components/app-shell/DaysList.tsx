@@ -210,7 +210,7 @@ export function DaysList({ days, selectedDate, workspaceId, onSelectDay }: DaysL
 
   const readCollapsedGroups = useCallback(
     (scope: string): Set<string> => {
-      const raw = storage.getRaw(storage.KEYS.collapsedSessionGroups, scope)
+      const raw = storage.getRaw(storage.KEYS.collapsedDayGroups, scope)
       if (raw === null) {
         const expandedKeys = defaultExpandedWeekKeys(locale)
         return new Set(weekGroups.filter((g) => !expandedKeys.has(g.key)).map((g) => g.key))
@@ -242,7 +242,7 @@ export function DaysList({ days, selectedDate, workspaceId, onSelectDay }: DaysL
 
   useEffect(() => {
     if (scopeKeyRef.current !== scopeKey) return
-    storage.set(storage.KEYS.collapsedSessionGroups, Array.from(collapsedGroups), scopeKey)
+    storage.set(storage.KEYS.collapsedDayGroups, Array.from(collapsedGroups), scopeKey)
   }, [collapsedGroups, scopeKey])
 
   useEffect(() => {

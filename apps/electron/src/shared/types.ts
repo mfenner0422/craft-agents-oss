@@ -435,6 +435,7 @@ export interface ElectronAPI {
   saveCapture(input: { workspaceId: string; source: string; url?: string; title?: string; body: string; tags?: string[] }): Promise<import('@craft-agent/shared/capture').CaptureItem>
   listCaptureInbox(workspaceId: string, limit?: number): Promise<import('@craft-agent/shared/capture').CaptureItem[]>
   deleteCapture(workspaceId: string, itemId: string): Promise<void>
+  promoteCapture(workspaceId: string, itemId: string, target: { kind: 'day'; dateISO: string; slot?: number } | { kind: 'next' } | { kind: 'someday' } | { kind: 'drop' }): Promise<import('@craft-agent/shared/tasks').TaskRecord>
   enrichCaptureUrl(url: string): Promise<{ title?: string; description?: string }>
   openCaptureWindow(workspaceId: string): Promise<void>
   onCaptureSaved(callback: (payload: { workspaceId: string; item: import('@craft-agent/shared/capture').CaptureItem }) => void): () => void
@@ -445,8 +446,15 @@ export interface ElectronAPI {
   getIncompleteDayTasks(workspaceId: string, dateISO: string): Promise<import('@craft-agent/shared/days').DayTask[]>
   pullForwardDayTasks(workspaceId: string, fromDateISO: string, toDateISO: string): Promise<import('@craft-agent/shared/days').DayTask[]>
   updateDayFile(workspaceId: string, dateISO: string, kind: import('@craft-agent/shared/days').DayFileKind, content: string): Promise<import('@craft-agent/shared/days').DayRecord>
-  updateDayTaskLists(workspaceId: string, dateISO: string, payload: { today: import('@craft-agent/shared/days').DayTask[]; next: import('@craft-agent/shared/days').DayTask[]; someday: import('@craft-agent/shared/days').DayTask[] }): Promise<import('@craft-agent/shared/days').DaysBoardRecord>
+  updateDayTaskLists(workspaceId: string, dateISO: string, payload: import('@craft-agent/shared/days').ReorderTaskListsPayload): Promise<import('@craft-agent/shared/days').DaysBoardRecord>
+  moveDayTask(workspaceId: string, taskId: string, target: import('@craft-agent/shared/tasks').TaskPromoteTarget): Promise<import('@craft-agent/shared/tasks').TaskRecord>
   onDaysChanged(callback: (payload: { workspaceId: string; dateISO: string }) => void): () => void
+  listTasks(workspaceId: string, filter?: import('@craft-agent/shared/tasks').TaskListFilter): Promise<import('@craft-agent/shared/tasks').TaskRecord[]>
+  getTask(workspaceId: string, id: string): Promise<import('@craft-agent/shared/tasks').TaskRecord | null>
+  createTask(workspaceId: string, input: import('@craft-agent/shared/tasks').TaskCreateInput): Promise<import('@craft-agent/shared/tasks').TaskRecord>
+  updateTask(workspaceId: string, id: string, patch: Partial<Omit<import('@craft-agent/shared/tasks').TaskRecord, 'id' | 'filePath'>>): Promise<import('@craft-agent/shared/tasks').TaskRecord>
+  promoteTask(workspaceId: string, id: string, target: import('@craft-agent/shared/tasks').TaskPromoteTarget): Promise<import('@craft-agent/shared/tasks').TaskRecord>
+  onTasksChanged(callback: (payload: { workspaceId: string; task: import('@craft-agent/shared/tasks').TaskRecord }) => void): () => void
 
   // Folder dialog
   openFolderDialog(): Promise<string | null>
@@ -829,7 +837,15 @@ export interface CaptureNavigationState {
 
 export interface DaysNavigationState {
   navigator: 'days'
-  dateISO?: string
+  details: { type: 'day'; id: string } | { type: 'triage' } | null
+  rightSidebar?: RightSidebarPanel
+}
+
+export type TasksGroupId = 'all' | 'today' | 'lingering' | 'next' | 'someday' | 'completed' | 'canceled'
+
+export interface TasksNavigationState {
+  navigator: 'tasks'
+  details: { type: 'group'; id: TasksGroupId } | null
   rightSidebar?: RightSidebarPanel
 }
 
@@ -844,6 +860,7 @@ export type NavigationState =
   | AutomationsNavigationState
   | CaptureNavigationState
   | DaysNavigationState
+  | TasksNavigationState
 
 export const isSessionsNavigation = (
   state: NavigationState
@@ -872,6 +889,10 @@ export const isCaptureNavigation = (
 export const isDaysNavigation = (
   state: NavigationState
 ): state is DaysNavigationState => state.navigator === 'days'
+
+export const isTasksNavigation = (
+  state: NavigationState
+): state is TasksNavigationState => state.navigator === 'tasks'
 
 export const DEFAULT_NAVIGATION_STATE: NavigationState = {
   navigator: 'sessions',
@@ -902,7 +923,12 @@ export const getNavigationStateKey = (state: NavigationState): string => {
     return state.details ? `capture/item/${state.details.id}` : 'capture'
   }
   if (state.navigator === 'days') {
-    return state.dateISO ? `days/${state.dateISO}` : 'days'
+    if (!state.details) return 'days'
+    if (state.details.type === 'triage') return 'days/triage'
+    return `days/${state.details.id}`
+  }
+  if (state.navigator === 'tasks') {
+    return state.details ? `tasks/${state.details.id}` : 'tasks'
   }
   if (state.navigator === 'settings') {
     return `settings:${state.subpage}`
@@ -956,10 +982,22 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
     const id = key.slice(13)
     return id ? { navigator: 'capture', details: { type: 'item', id } } : { navigator: 'capture', details: null }
   }
-  if (key === 'days') return { navigator: 'days' }
+  if (key === 'days') return { navigator: 'days', details: null }
+  if (key === 'days/triage') return { navigator: 'days', details: { type: 'triage' } }
   if (key.startsWith('days/')) {
     const dateISO = key.slice(5)
-    return /^\d{4}-\d{2}-\d{2}$/.test(dateISO) ? { navigator: 'days', dateISO } : { navigator: 'days' }
+    return /^\d{4}-\d{2}-\d{2}$/.test(dateISO)
+      ? { navigator: 'days', details: { type: 'day', id: dateISO } }
+      : { navigator: 'days', details: null }
+  }
+
+  if (key === 'tasks') return { navigator: 'tasks', details: null }
+  if (key.startsWith('tasks/')) {
+    const group = key.slice(6) as TasksGroupId
+    const valid: TasksGroupId[] = ['all', 'today', 'lingering', 'next', 'someday', 'completed', 'canceled']
+    return valid.includes(group)
+      ? { navigator: 'tasks', details: { type: 'group', id: group } }
+      : { navigator: 'tasks', details: null }
   }
 
   // Handle settings

@@ -1,9 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { ExternalLink, X } from 'lucide-react'
-import type { DayFileKind, DayRecord, DayTask, DaysBoardRecord } from '@craft-agent/shared/days'
+import type { DayFileKind, DayRecord, DayTask, DayTaskStatus, DaysBoardRecord } from '@craft-agent/shared/days'
 import { addDays, todayDateISO } from '@craft-agent/shared/days/date'
+import type { TaskListKind, TaskRecord } from '@craft-agent/shared/tasks'
+import { TaskBoard, type TaskBoardActions, type TaskBoardTasks, type TaskListKey } from '@craft-agent/ui/days'
 import { WeekStrip } from './WeekStrip'
-import { TasksTab } from './TasksTab'
 import { NotesTab } from './NotesTab'
 
 interface Props {
@@ -12,7 +13,6 @@ interface Props {
 
 type Mode = 'anchored' | 'detached'
 type Tab = 'tasks' | 'notes'
-type TaskLists = DaysBoardRecord['tasks']
 
 export function DaysTrayPopover({ initialWorkspaceId }: Props) {
   const [workspaceId] = useState(initialWorkspaceId)
@@ -71,12 +71,62 @@ export function DaysTrayPopover({ initialWorkspaceId }: Props) {
     setDay(await loadDaysBoard(workspaceId, selectedDate))
   }, [workspaceId, selectedDate])
 
-  const onUpdateTaskLists = useCallback(async (payload: TaskLists) => {
+  const [tasks, setTasks] = useState<TaskBoardTasks>({ today: [], next: [], someday: [] })
+  const [activeList, setActiveList] = useState<TaskListKey>('today')
+
+  useEffect(() => {
+    setTasks(day?.tasks ?? { today: [], next: [], someday: [] })
+  }, [day])
+
+  const ensureDayPersisted = useCallback(async () => {
     if (!workspaceId) return
     await window.electronAPI.ensureDay(workspaceId, selectedDate)
-    const updated = await window.electronAPI.updateDayTaskLists(workspaceId, selectedDate, payload)
-    setDay(updated)
   }, [workspaceId, selectedDate])
+
+  const trayActions = useMemo<TaskBoardActions>(() => ({
+    async add(list: TaskListKey) {
+      if (!workspaceId) return null
+      await ensureDayPersisted()
+      const placement = list === 'today'
+        ? { day: selectedDate, list: null }
+        : { day: null, list: list as TaskListKind }
+      const created = await window.electronAPI.createTask(workspaceId, { title: '', status: 'todo', ...placement })
+      return taskRecordToDayTask(created)
+    },
+    async updateTitle(id: string, title: string) {
+      if (!workspaceId) return
+      if (!title.trim()) {
+        await window.electronAPI.promoteTask(workspaceId, id, { kind: 'drop' })
+        return
+      }
+      await window.electronAPI.updateTask(workspaceId, id, { title })
+    },
+    async setStatus(id: string, status: DayTaskStatus) {
+      if (!workspaceId) return
+      await window.electronAPI.updateTask(workspaceId, id, { status })
+    },
+    async moveToList(id: string, list: TaskListKind) {
+      if (!workspaceId) return
+      await window.electronAPI.promoteTask(workspaceId, id, { kind: list })
+    },
+    async moveToDate(id: string, dateISO: string) {
+      if (!workspaceId) return
+      await window.electronAPI.moveDayTask(workspaceId, id, { kind: 'day', dateISO })
+    },
+    async remove(id: string) {
+      if (!workspaceId) return
+      await window.electronAPI.promoteTask(workspaceId, id, { kind: 'drop' })
+    },
+    async reorderList(list: TaskListKey, orderedIds: string[]) {
+      if (!workspaceId) return
+      await ensureDayPersisted()
+      await window.electronAPI.updateDayTaskLists(workspaceId, selectedDate, { [list]: orderedIds })
+    },
+    async setDue(id: string, due: string | null) {
+      if (!workspaceId) return
+      await window.electronAPI.updateTask(workspaceId, id, due === null ? { due: undefined } : { due })
+    },
+  }), [workspaceId, selectedDate, ensureDayPersisted])
 
   const headerLabel = useMemo(() => formatHeaderDate(selectedDate), [selectedDate])
   const isToday = selectedDate === todayDateISO()
@@ -142,13 +192,32 @@ export function DaysTrayPopover({ initialWorkspaceId }: Props) {
 
       <div className="flex-1 min-h-0 overflow-y-auto">
         {tab === 'tasks' ? (
-          <TasksTab
-            day={day}
-            carryForward={visibleCarryForward}
-            onDismissCarryForward={() => setCarryForwardDismissedKey(carryForwardKey)}
-            onPullForward={onPullForward}
-            onUpdateTaskLists={onUpdateTaskLists}
-          />
+          <div className="px-3 py-2.5">
+            {visibleCarryForward.length > 0 && (
+              <div className="mb-2.5 rounded-md border border-border bg-foreground/[0.03] px-2.5 py-2 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-[12px] font-medium">{visibleCarryForward.length} task{visibleCarryForward.length === 1 ? '' : 's'} from yesterday</div>
+                  <div className="text-[11px] text-muted-foreground truncate">{visibleCarryForward.map(t => t.text).join(', ')}</div>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <button type="button" className="rounded-md border border-border px-2 py-1 text-[11px] hover:bg-foreground/[0.05]" onClick={onPullForward}>Pull forward</button>
+                  <button type="button" className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground" onClick={() => setCarryForwardDismissedKey(carryForwardKey)} aria-label="Dismiss pull-forward suggestion">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+            <TaskBoard
+              dateISO={selectedDate}
+              tasks={tasks}
+              setTasks={setTasks}
+              actions={trayActions}
+              activeList={activeList}
+              onActiveListChange={setActiveList}
+              density="compact"
+              showCapacityWarning
+            />
+          </div>
         ) : (
           <NotesTab
             day={day}
@@ -195,59 +264,24 @@ function defaultDayRecord(dateISO: string): DaysBoardRecord {
 }
 
 async function loadDaysBoard(workspaceId: string, dateISO: string): Promise<DaysBoardRecord | null> {
-  if (window.electronAPI.isChannelAvailable('days:getBoard')) {
-    try {
-      return await window.electronAPI.getDaysBoard(workspaceId, dateISO)
-    } catch {
-      // The renderer can briefly outpace the main process during hot reload.
-    }
+  try {
+    return await window.electronAPI.getDaysBoard(workspaceId, dateISO)
+  } catch {
+    return null
   }
-  const record = await window.electronAPI.getDay(workspaceId, dateISO)
-  return record ? dayRecordToBoard(record) : null
 }
 
-function dayRecordToBoard(record: DayRecord): DaysBoardRecord {
-  const bodies = record.bodies ?? {
-    tasks: stripManagedTitle(record.files.tasks),
-    scratch: stripManagedTitle(record.files.scratch),
-    journal: stripManagedTitle(record.files.journal),
-  }
+function taskRecordToDayTask(task: TaskRecord): DayTask {
   return {
-    ...record,
-    bodies,
-    tasks: {
-      today: parseFallbackTaskList(bodies.tasks),
-      next: [],
-      someday: [],
-    },
+    id: task.id,
+    text: task.title,
+    status: task.status,
+    ...(task.tags && task.tags.length > 0 ? { tags: task.tags } : {}),
+    source: task.source,
+    ...(task.source_ref ? { source_ref: task.source_ref } : {}),
+    ...(task.due ? { due: task.due } : {}),
+    ...(task.body ? { body: task.body } : {}),
   }
-}
-
-function stripManagedTitle(content: string): string {
-  return content.replace(/^\s*#\s+[^\n]*\n?/, '').replace(/^\n/, '')
-}
-
-function parseFallbackTaskList(content: string): DayTask[] {
-  const markerToStatus: Record<string, DayTask['status']> = {
-    ' ': 'todo',
-    '/': 'in_progress',
-    '>': 'delegated',
-    x: 'completed',
-    X: 'completed',
-    '-': 'canceled',
-  }
-  return content.split('\n').flatMap((line, index) => {
-    const match = line.match(/^\s*-\s+\[([ xX/>-])\]\s+(.*?)(?:\s*<!--\s*task:([a-zA-Z0-9_-]+)\s*-->)?\s*$/)
-    if (!match) return []
-    const text = (match[2] ?? '').trim()
-    if (!text) return []
-    return [{
-      id: match[3] ?? `${index}-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`,
-      text,
-      status: markerToStatus[match[1] ?? ' '] ?? 'todo',
-      line,
-    }]
-  })
 }
 
 function formatHeaderDate(dateISO: string): string {
