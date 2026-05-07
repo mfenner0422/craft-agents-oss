@@ -1,5 +1,5 @@
-import { describe, it, expect, mock, beforeEach } from 'bun:test'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
@@ -12,10 +12,37 @@ mock.module('../../config/preferences.ts', () => ({
   formatPreferencesForPrompt: () => '',
 }))
 
-import { buildRockySystemPrompt, getSystemPrompt } from '../system'
+import { resolveVaultRoot } from '../../vault/path.ts'
+import type { WorkspaceConfig } from '../../workspaces/types.ts'
+import { buildRockySystemPrompt, buildVaultSystemPrompt, getSystemPrompt } from '../system'
 
 const GIT_CONVENTIONS_HEADING = '## Git Conventions'
 const CO_AUTHOR_TRAILER = 'Co-Authored-By: Craft Agent <agents-noreply@craft.do>'
+const tempDirs: string[] = []
+
+function tempWorkspace(prefix = 'system-prompt-'): string {
+  const workspace = mkdtempSync(join(tmpdir(), prefix))
+  tempDirs.push(workspace)
+  return workspace
+}
+
+function writeWorkspaceConfig(workspace: string, config: Partial<WorkspaceConfig> = {}): void {
+  const fullConfig: WorkspaceConfig = {
+    id: 'test-workspace',
+    name: 'Test Workspace',
+    slug: 'test-workspace',
+    createdAt: 0,
+    updatedAt: 0,
+    ...config,
+  }
+  writeFileSync(join(workspace, 'config.json'), JSON.stringify(fullConfig, null, 2))
+}
+
+afterEach(() => {
+  for (const dir of tempDirs.splice(0)) {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
 
 describe('system prompt guidance', () => {
   it('uses backend-neutral debug log querying guidance (rg/grep via Bash)', () => {
@@ -113,7 +140,7 @@ describe('includeCoAuthoredBy handling', () => {
 
 describe('Rocky system prompt context', () => {
   it('injects root Rocky files when present', () => {
-    const workspace = mkdtempSync(join(tmpdir(), 'rocky-system-'))
+    const workspace = tempWorkspace('rocky-system-')
     writeFileSync(join(workspace, 'AGENTS.md'), 'Operational harness')
     writeFileSync(join(workspace, 'SOUL.md'), 'Persona shape')
     writeFileSync(join(workspace, 'USER.md'), 'Micah profile')
@@ -129,15 +156,116 @@ describe('Rocky system prompt context', () => {
   })
 
   it('ignores non-Rocky workspaces', () => {
-    const workspace = mkdtempSync(join(tmpdir(), 'plain-system-'))
+    const workspace = tempWorkspace('plain-system-')
 
     expect(buildRockySystemPrompt(workspace)).toBe('')
   })
 
   it('rejects Rocky context above 10KB', () => {
-    const workspace = mkdtempSync(join(tmpdir(), 'rocky-large-system-'))
+    const workspace = tempWorkspace('rocky-large-system-')
     writeFileSync(join(workspace, 'MEMORY.md'), 'x'.repeat(11 * 1024))
 
     expect(() => buildRockySystemPrompt(workspace)).toThrow('Rocky system prompt exceeds 10KB')
+  })
+})
+
+describe('Vault system prompt context', () => {
+  it('returns empty when workspaceRootPath is undefined', () => {
+    expect(buildVaultSystemPrompt()).toBe('')
+  })
+
+  it('returns empty when neither days nor capture is enabled', () => {
+    const workspace = tempWorkspace('vault-disabled-system-')
+    writeWorkspaceConfig(workspace, {
+      days: { enabled: false },
+      capture: { enabled: false },
+    })
+
+    expect(buildVaultSystemPrompt(workspace)).toBe('')
+  })
+
+  it('returns empty when vault path resolution fails', () => {
+    const workspace = tempWorkspace('vault-blocked-system-')
+    writeFileSync(join(workspace, 'blocked'), 'not a dir')
+    writeWorkspaceConfig(workspace, {
+      vault: { path: 'blocked/vault' },
+      capture: { enabled: true },
+    })
+
+    expect(() => buildVaultSystemPrompt(workspace)).not.toThrow()
+    expect(buildVaultSystemPrompt(workspace)).toBe('')
+  })
+
+  it('includes a vault block when only days is enabled', () => {
+    const workspace = tempWorkspace('vault-days-system-')
+    writeWorkspaceConfig(workspace, {
+      days: { enabled: true },
+    })
+
+    const prompt = buildVaultSystemPrompt(workspace)
+
+    expect(prompt).toContain('## Vault')
+    expect(prompt).toContain('<vault>')
+    expect(prompt).toContain(`root: ${join(workspace, 'vault')}`)
+    expect(prompt).toContain(`Read ${join(workspace, 'vault')}/daily/next.md`)
+  })
+
+  it('includes a vault block when only capture is enabled', () => {
+    const workspace = tempWorkspace('vault-capture-system-')
+    writeWorkspaceConfig(workspace, {
+      capture: { enabled: true },
+    })
+
+    const prompt = buildVaultSystemPrompt(workspace)
+
+    expect(prompt).toContain('## Vault')
+    expect(prompt).toContain('<vault>')
+    expect(prompt).toContain(`Glob ${join(workspace, 'vault')}/inbox/*.md`)
+    expect(prompt).toContain(`Grep ${join(workspace, 'vault')}/inbox/`)
+  })
+
+  it('contains the resolved absolute vault root', () => {
+    const workspace = tempWorkspace('vault-custom-root-system-')
+    writeWorkspaceConfig(workspace, {
+      vault: { path: 'notes/vault' },
+      capture: { enabled: true },
+    })
+    const root = resolveVaultRoot(workspace, { vault: { path: 'notes/vault' } })
+
+    expect(buildVaultSystemPrompt(workspace)).toContain(`root: ${root}`)
+  })
+
+  it('is byte-identical across calls with unchanged config', () => {
+    const workspace = tempWorkspace('vault-stable-system-')
+    writeWorkspaceConfig(workspace, {
+      days: { enabled: true },
+      capture: { enabled: true },
+    })
+
+    expect(buildVaultSystemPrompt(workspace)).toBe(buildVaultSystemPrompt(workspace))
+  })
+
+  it('inserts vault context after Rocky context and before preferences', () => {
+    const workspace = tempWorkspace('vault-order-system-')
+    writeFileSync(join(workspace, 'AGENTS.md'), 'Operational harness')
+    writeWorkspaceConfig(workspace, {
+      capture: { enabled: true },
+    })
+
+    const prompt = getSystemPrompt(
+      '\n\n## User Preferences\n\nPrefer concise responses.',
+      undefined,
+      workspace,
+      workspace
+    )
+
+    const rockyIndex = prompt.indexOf('## Rocky Workspace Context')
+    const vaultIndex = prompt.indexOf('## Vault')
+    const preferencesIndex = prompt.indexOf('## User Preferences')
+
+    expect(rockyIndex).toBeGreaterThanOrEqual(0)
+    expect(vaultIndex).toBeGreaterThan(rockyIndex)
+    expect(preferencesIndex).toBeGreaterThan(vaultIndex)
+    expect(prompt.match(/<vault>/g)).toHaveLength(1)
   })
 })

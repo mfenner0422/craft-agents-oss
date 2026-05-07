@@ -7,6 +7,8 @@ import { PERMISSION_MODE_CONFIG } from '../agent/mode-types.ts';
 import { FEATURE_FLAGS } from '../feature-flags.ts';
 import { APP_VERSION } from '../version/index.ts';
 import { readPluginName } from '../utils/workspace.ts';
+import { loadWorkspaceConfig } from '../workspaces/index.ts';
+import { resolveVaultRoot } from '../vault/path.ts';
 import { globSync } from 'glob';
 import os from 'os';
 
@@ -124,6 +126,48 @@ export function buildRockySystemPrompt(workspaceRootPath?: string): string {
     throw new Error(`Rocky system prompt exceeds 10KB: ${prompt.length}`);
   }
   return prompt;
+}
+
+/**
+ * Build static vault discovery instructions for the system prompt.
+ *
+ * The vault root is pinned with the rest of the system prompt for a session.
+ * Vault path resolution may create the vault directory; failures are ignored so
+ * workspace config or filesystem issues cannot prevent session startup.
+ */
+export function buildVaultSystemPrompt(workspaceRootPath?: string): string {
+  if (!workspaceRootPath) return '';
+
+  try {
+    const config = loadWorkspaceConfig(workspaceRootPath);
+    const daysEnabled = config?.days?.enabled === true;
+    const captureEnabled = config?.capture?.enabled === true;
+    if (!daysEnabled && !captureEnabled) return '';
+
+    const root = resolveVaultRoot(workspaceRootPath, config);
+    return `
+
+## Vault
+
+<vault>
+root: ${root}
+
+structure:
+  inbox/                  - captures (md + frontmatter: id, captured_at, source, url?, title?, tags)
+  daily/YYYY-MM-DD/       - per-day notes (tasks.md, scratch.md, journal.md)
+  daily/next.md           - shared "Next" task list
+  daily/someday.md        - shared "Someday" task list
+  _templates/daily/       - optional template overrides
+
+usage:
+  - List captures: Glob ${root}/inbox/*.md
+  - Search captures: Grep ${root}/inbox/
+  - Read a specific day: Read ${root}/daily/<YYYY-MM-DD>/<file>.md
+  - Backlog: Read ${root}/daily/next.md or ${root}/daily/someday.md
+</vault>`;
+  } catch {
+    return '';
+  }
 }
 
 /**
@@ -400,6 +444,7 @@ export function getSystemPrompt(
   // Get project context files for monorepo support (lives in system prompt for persistence across compaction)
   const projectContextFiles = getProjectContextFilesPrompt(workingDirectory);
   const rockyContext = buildRockySystemPrompt(workspaceRootPath);
+  const vaultContext = buildVaultSystemPrompt(workspaceRootPath);
 
   // Fall back to the user's current preference when callers don't pin/pass a value,
   // so forgetting the argument can't silently re-enable the co-author trailer (see #576).
@@ -409,7 +454,7 @@ export function getSystemPrompt(
   // to enable prompt caching. The system prompt stays static and cacheable.
   // Safe Mode context is also in user messages for the same reason.
   const basePrompt = getCraftAssistantPrompt(workspaceRootPath, backendName, resolvedIncludeCoAuthoredBy);
-  const fullPrompt = `${basePrompt}${rockyContext}${preferences}${debugContext}${projectContextFiles}`;
+  const fullPrompt = `${basePrompt}${rockyContext}${vaultContext}${preferences}${debugContext}${projectContextFiles}`;
 
   debug('[getSystemPrompt] full prompt length:', fullPrompt.length);
 
