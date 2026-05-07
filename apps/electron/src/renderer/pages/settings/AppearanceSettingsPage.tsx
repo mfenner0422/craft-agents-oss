@@ -16,6 +16,7 @@ import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopo
 import { useTheme } from '@/context/ThemeContext'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { routes } from '@/lib/navigate'
+import { isMac } from '@/lib/platform'
 import { Monitor, Sun, Moon } from 'lucide-react'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { ToolIconMapping } from '../../../shared/types'
@@ -144,6 +145,23 @@ export default function AppearanceSettingsPage() {
   const handleRichToolDescriptionsChange = useCallback(async (checked: boolean) => {
     setRichToolDescriptions(checked)
     await window.electronAPI?.setRichToolDescriptions?.(checked)
+  }, [])
+
+  // Days menubar toggles (macOS only)
+  const [daysTrayEnabled, setDaysTrayEnabled] = useState(true)
+  const [daysTrayAlwaysOnTop, setDaysTrayAlwaysOnTop] = useState(true)
+  useEffect(() => {
+    if (!isMac) return
+    window.electronAPI?.getDaysTrayEnabled?.().then(setDaysTrayEnabled).catch(() => {})
+    window.electronAPI?.getDaysTrayDetachedAlwaysOnTop?.().then(setDaysTrayAlwaysOnTop).catch(() => {})
+  }, [])
+  const handleDaysTrayEnabledChange = useCallback(async (checked: boolean) => {
+    setDaysTrayEnabled(checked)
+    await window.electronAPI?.setDaysTrayEnabled?.(checked)
+  }, [])
+  const handleDaysTrayAlwaysOnTopChange = useCallback(async (checked: boolean) => {
+    setDaysTrayAlwaysOnTop(checked)
+    await window.electronAPI?.setDaysTrayDetachedAlwaysOnTop?.(checked)
   }, [])
 
   // Load preset themes on mount
@@ -366,6 +384,26 @@ export default function AppearanceSettingsPage() {
                   />
                 </SettingsCard>
               </SettingsSection>
+
+              {/* Days menubar (macOS) */}
+              {isMac && (
+                <SettingsSection title="Days menubar">
+                  <SettingsCard>
+                    <SettingsToggle
+                      label="Show Days in the menubar"
+                      description="A small calendar icon with today's date that opens a quick view of your tasks and notes."
+                      checked={daysTrayEnabled}
+                      onCheckedChange={handleDaysTrayEnabledChange}
+                    />
+                    <SettingsToggle
+                      label="Float when detached"
+                      description="When you drag the popover off the menubar, keep it above other windows."
+                      checked={daysTrayAlwaysOnTop}
+                      onCheckedChange={handleDaysTrayAlwaysOnTopChange}
+                    />
+                  </SettingsCard>
+                </SettingsSection>
+              )}
 
               {/* Tool Icons — shows the command → icon mapping used in turn cards */}
               <SettingsSection

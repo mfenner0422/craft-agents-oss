@@ -315,6 +315,10 @@ export const CHANNEL_MAP = {
   // Appearance settings
   getRichToolDescriptions: invoke(RPC_CHANNELS.appearance.GET_RICH_TOOL_DESCRIPTIONS),
   setRichToolDescriptions: invoke(RPC_CHANNELS.appearance.SET_RICH_TOOL_DESCRIPTIONS),
+  getDaysTrayEnabled: invoke(RPC_CHANNELS.daysTray.GET_ENABLED),
+  setDaysTrayEnabled: invoke(RPC_CHANNELS.daysTray.SET_ENABLED),
+  getDaysTrayDetachedAlwaysOnTop: invoke(RPC_CHANNELS.daysTray.GET_DETACHED_ALWAYS_ON_TOP),
+  setDaysTrayDetachedAlwaysOnTop: invoke(RPC_CHANNELS.daysTray.SET_DETACHED_ALWAYS_ON_TOP),
 
   // Tools settings
   getBrowserToolEnabled: invoke(RPC_CHANNELS.tools.GET_BROWSER_TOOL_ENABLED),

@@ -72,6 +72,9 @@ export interface StoredConfig {
   keepAwakeWhileRunning?: boolean;  // Prevent screen sleep while sessions are running (default: false)
   // Tool metadata
   richToolDescriptions?: boolean;  // Add intent/action metadata to all tool calls (default: true)
+  // Days menubar item (macOS only)
+  daysTrayEnabled?: boolean;  // Show the Days menubar/tray item (default: true on macOS)
+  daysTrayDetachedAlwaysOnTop?: boolean;  // When detached from menubar, float above other windows (default: true)
   // Tools
   browserToolEnabled?: boolean;  // Enable built-in browser tool (default: true). Disable for Playwright/Puppeteer.
   // Prompt caching & context
@@ -425,6 +428,45 @@ export function setRichToolDescriptions(enabled: boolean): void {
   const config = loadStoredConfig();
   if (!config) return;
   config.richToolDescriptions = enabled;
+  saveConfig(config);
+}
+
+/**
+ * Whether the Days menubar/tray item is enabled. macOS-only feature.
+ * Defaults to true when not set.
+ */
+export function getDaysTrayEnabled(): boolean {
+  const config = loadStoredConfig();
+  if (config?.daysTrayEnabled !== undefined) {
+    return config.daysTrayEnabled;
+  }
+  return true;
+}
+
+export function setDaysTrayEnabled(enabled: boolean): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.daysTrayEnabled = enabled;
+  saveConfig(config);
+}
+
+/**
+ * Whether the detached Days popover should float above other windows.
+ * Only takes effect when the popover is dragged off the menubar.
+ * Defaults to true when not set.
+ */
+export function getDaysTrayDetachedAlwaysOnTop(): boolean {
+  const config = loadStoredConfig();
+  if (config?.daysTrayDetachedAlwaysOnTop !== undefined) {
+    return config.daysTrayDetachedAlwaysOnTop;
+  }
+  return true;
+}
+
+export function setDaysTrayDetachedAlwaysOnTop(enabled: boolean): void {
+  const config = loadStoredConfig();
+  if (!config) return;
+  config.daysTrayDetachedAlwaysOnTop = enabled;
   saveConfig(config);
 }
 

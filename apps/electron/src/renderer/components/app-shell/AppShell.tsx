@@ -57,6 +57,7 @@ import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipTrigger, TooltipContent, DocumentFormattedMarkdownOverlay } from "@craft-agent/ui"
 import { CaptureListPanel } from "@/components/app-shell/CaptureListPanel"
 import { DaysList } from "@/components/app-shell/DaysList"
+import { createDaysTrayNavigateHandler } from "@/days-tray/navigation"
 import type { CaptureItem } from "@craft-agent/shared/capture"
 import { todayDateISO } from "@craft-agent/shared/days/date"
 import {
@@ -2058,6 +2059,16 @@ function AppShellContent({
     menuTriggerRef.current = menuNewChatTrigger
     handleNewChat()
   }, [menuNewChatTrigger, handleNewChat])
+
+  useEffect(() => {
+    return window.electronAPI.onDaysTrayNavigate?.(createDaysTrayNavigateHandler({
+      activeWorkspaceId,
+      navigate,
+      setLastSelectedDay: (dateISO, workspaceId) => {
+        storage.set(storage.KEYS.lastSelectedDay, dateISO, workspaceId)
+      },
+    }))
+  }, [activeWorkspaceId])
 
   // Unified sidebar items: nav buttons only (agents system removed)
   type SidebarItem = {

@@ -334,6 +334,12 @@ export const RPC_CHANNELS = {
     GET_RICH_TOOL_DESCRIPTIONS: 'appearance:getRichToolDescriptions',
     SET_RICH_TOOL_DESCRIPTIONS: 'appearance:setRichToolDescriptions',
   },
+  daysTray: {
+    GET_ENABLED: 'daysTray:getEnabled',
+    SET_ENABLED: 'daysTray:setEnabled',
+    GET_DETACHED_ALWAYS_ON_TOP: 'daysTray:getDetachedAlwaysOnTop',
+    SET_DETACHED_ALWAYS_ON_TOP: 'daysTray:setDetachedAlwaysOnTop',
+  },
   tools: {
     GET_BROWSER_TOOL_ENABLED: 'tools:getBrowserToolEnabled',
     SET_BROWSER_TOOL_ENABLED: 'tools:setBrowserToolEnabled',
