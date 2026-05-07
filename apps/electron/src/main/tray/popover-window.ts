@@ -1,5 +1,6 @@
 import { BrowserWindow, screen, shell, type Rectangle } from 'electron'
 import { join } from 'node:path'
+import { shouldReloadPopoverWorkspace } from './popover-workspace'
 
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
 
@@ -19,6 +20,7 @@ export class TrayPopoverWindow {
   private mode: PopoverMode = 'anchored'
   private anchoredOriginX = 0
   private anchoredOriginY = 0
+  private workspaceId: string | null = null
   private blurHandler: (() => void) | null = null
   private moveHandler: (() => void) | null = null
 
@@ -58,8 +60,12 @@ export class TrayPopoverWindow {
     this.anchoredOriginY = targetY
     this.applyMode('anchored')
     this.window.setBounds({ x: clampedX, y: targetY, width: POPOVER_WIDTH, height: POPOVER_HEIGHT })
-    this.window.show()
-    this.window.focus()
+    this.window.setFocusable(false)
+    this.window.showInactive()
+    setTimeout(() => {
+      if (!this.window || this.window.isDestroyed()) return
+      this.window.setFocusable(true)
+    }, 150)
   }
 
   detach(): void {
@@ -89,10 +95,14 @@ export class TrayPopoverWindow {
 
   private ensureWindow(workspaceId: string | null): void {
     if (this.window && !this.window.isDestroyed()) {
-      this.window.loadURL(buildUrl(workspaceId))
+      if (shouldReloadPopoverWorkspace(this.workspaceId, workspaceId)) {
+        this.workspaceId = workspaceId
+        void this.window.loadURL(buildUrl(workspaceId))
+      }
       return
     }
 
+    this.workspaceId = workspaceId
     this.window = new BrowserWindow({
       width: POPOVER_WIDTH,
       height: POPOVER_HEIGHT,
@@ -144,7 +154,6 @@ export class TrayPopoverWindow {
         this.applyMode('detached')
       }
     }
-
     this.window.on('blur', blurHandler)
     this.window.on('move', moveHandler)
     this.blurHandler = blurHandler
@@ -167,6 +176,7 @@ export class TrayPopoverWindow {
     if (mode === this.mode) return
     this.mode = mode
     if (!this.window || this.window.isDestroyed()) return
+    this.window.setMovable(true)
 
     if (mode === 'detached') {
       this.window.setAlwaysOnTop(this.options.getDetachedAlwaysOnTop(), 'floating')

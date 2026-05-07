@@ -39,7 +39,7 @@ function CaptureWindow() {
   }, [body, hasUrlOrTitle, saving, title, url, workspaceId])
 
   return (
-    <main className="h-screen w-screen bg-background text-foreground border border-border/60 shadow-2xl">
+    <main className="h-screen w-screen bg-background text-foreground border border-border/60 shadow-strong">
       <header className="h-10 px-3 flex items-center justify-between border-b border-border/60 [-webkit-app-region:drag]">
         <div className="text-[13px] font-medium">Capture</div>
         <button

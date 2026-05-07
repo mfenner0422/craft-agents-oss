@@ -1,46 +1,65 @@
-import React, { useCallback, useMemo, useState } from 'react'
-import { CornerDownLeft } from 'lucide-react'
-import type { DayRecord, DayTask } from '@craft-agent/shared/days'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { Check, Circle, CircleDot, Forward, Plus, X } from 'lucide-react'
+import type { DayTask, DayTaskStatus, DaysBoardRecord } from '@craft-agent/shared/days'
 
 interface Props {
-  workspaceId: string
-  day: DayRecord | null
-  dateISO: string
+  day: DaysBoardRecord | null
   carryForward: DayTask[]
+  onDismissCarryForward: () => void
   onPullForward: () => void
-  onUpdateFile: (content: string) => void
+  onUpdateTaskLists: (payload: DaysBoardRecord['tasks']) => void
 }
 
-interface TaskLine {
-  raw: string
-  index: number
-  done: boolean
-  text: string
+const STATUS_ORDER: DayTaskStatus[] = ['todo', 'in_progress', 'delegated', 'completed', 'canceled']
+const STATUS_META: Record<DayTaskStatus, { label: string; icon: React.ComponentType<{ className?: string }> }> = {
+  todo: { label: 'To do', icon: Circle },
+  in_progress: { label: 'In progress', icon: CircleDot },
+  delegated: { label: 'Delegated', icon: Forward },
+  completed: { label: 'Completed', icon: Check },
+  canceled: { label: 'Canceled', icon: X },
 }
 
-export function TasksTab({ day, carryForward, onPullForward, onUpdateFile }: Props) {
-  const [draft, setDraft] = useState('')
-  const tasks = useMemo(() => parseTaskLines(day?.files.tasks ?? ''), [day])
+export function TasksTab({ day, carryForward, onDismissCarryForward, onPullForward, onUpdateTaskLists }: Props) {
+  const [tasks, setTasks] = useState<DayTask[]>([])
+  const [focusedTaskId, setFocusedTaskId] = useState<string | null>(null)
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const toggleTask = useCallback((index: number, done: boolean) => {
+  useEffect(() => {
+    setTasks(day?.tasks.today ?? [])
+  }, [day])
+
+  useEffect(() => () => {
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+  }, [])
+
+  const saveTasks = useCallback((next: DayTask[], immediate = false) => {
     if (!day) return
-    const lines = day.files.tasks.split('\n')
-    if (index < 0 || index >= lines.length) return
-    const line = lines[index]
-    lines[index] = done
-      ? line.replace(/^(\s*-\s+\[)\s(\])/, '$1x$2')
-      : line.replace(/^(\s*-\s+\[)x(\])/i, '$1 $2')
-    onUpdateFile(lines.join('\n'))
-  }, [day, onUpdateFile])
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    const payload = {
+      ...day.tasks,
+      today: next.filter(task => task.text.trim().length > 0),
+    }
+    if (immediate) onUpdateTaskLists(payload)
+    else saveTimer.current = setTimeout(() => onUpdateTaskLists(payload), 500)
+  }, [day, onUpdateTaskLists])
+
+  const updateTasks = useCallback((updater: (current: DayTask[]) => DayTask[], immediate = false) => {
+    setTasks(current => {
+      const next = updater(current)
+      saveTasks(next, immediate)
+      return next
+    })
+  }, [saveTasks])
 
   const addTask = useCallback(() => {
-    const text = draft.trim()
-    if (!text || !day) return
-    const current = day.files.tasks
-    const separator = current.endsWith('\n') ? '' : '\n'
-    onUpdateFile(`${current}${separator}- [ ] ${text}\n`)
-    setDraft('')
-  }, [draft, day, onUpdateFile])
+    const task: DayTask = {
+      id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      text: '',
+      status: 'todo',
+    }
+    updateTasks(current => [...current, task])
+    setFocusedTaskId(task.id)
+  }, [updateTasks])
 
   return (
     <div className="flex flex-col h-full">
@@ -55,80 +74,136 @@ export function TasksTab({ day, carryForward, onPullForward, onUpdateFile }: Pro
                 {carryForward.map(t => t.text).join(', ')}
               </div>
             </div>
-            <button
-              type="button"
-              className="shrink-0 rounded-md border border-border px-2 py-1 text-[11px] hover:bg-foreground/[0.05]"
-              onClick={onPullForward}
-            >
-              Pull forward
-            </button>
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                className="rounded-md border border-border px-2 py-1 text-[11px] hover:bg-foreground/[0.05]"
+                onClick={onPullForward}
+              >
+                Pull forward
+              </button>
+              <button
+                type="button"
+                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground"
+                onClick={onDismissCarryForward}
+                aria-label="Dismiss pull-forward suggestion"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </div>
         )}
 
         {tasks.length === 0 ? (
-          <div className="text-[12px] text-muted-foreground py-3">
-            No tasks yet — add one below.
-          </div>
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 rounded-[8px] bg-background px-3 py-4 text-left text-[13px] text-muted-foreground shadow-minimal hover:bg-foreground/[0.03] hover:text-foreground"
+            onClick={addTask}
+          >
+            <Plus className="h-4 w-4" />
+            Add a task
+          </button>
         ) : (
-          <ul className="flex flex-col gap-0.5">
-            {tasks.map(t => (
-              <li key={`${t.index}-${t.raw}`} className="flex items-start gap-2 py-1">
-                <input
-                  type="checkbox"
-                  className="mt-[3px] h-3.5 w-3.5 cursor-pointer accent-foreground"
-                  checked={t.done}
-                  onChange={(e) => toggleTask(t.index, e.target.checked)}
+          <div className="overflow-hidden rounded-[8px] bg-background shadow-minimal">
+            <div className="grid divide-y divide-border/70">
+              {tasks.map(task => (
+                <TaskRow
+                  key={task.id}
+                  task={task}
+                  shouldFocus={focusedTaskId === task.id}
+                  onFocusTask={setFocusedTaskId}
+                  onUpdate={(patch, immediate) => {
+                    updateTasks(current => current.map(item => item.id === task.id ? { ...item, ...patch } : item), immediate)
+                  }}
+                  onRemove={() => {
+                    updateTasks(current => current.filter(item => item.id !== task.id), true)
+                    setFocusedTaskId(null)
+                  }}
                 />
-                <span className={[
-                  'text-[13px] leading-snug min-w-0 break-words',
-                  t.done ? 'line-through text-muted-foreground' : '',
-                ].join(' ')}>
-                  {t.text}
-                </span>
-              </li>
-            ))}
-          </ul>
+              ))}
+            </div>
+          </div>
         )}
       </div>
 
-      <form
-        className="border-t border-border/60 p-2 flex items-center gap-2 shrink-0"
-        onSubmit={(e) => { e.preventDefault(); addTask() }}
-      >
-        <input
-          className="flex-1 h-8 rounded-md border border-border bg-background px-2 text-[12.5px] outline-none focus:ring-1 focus:ring-ring"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="Add a task…"
-          autoFocus
-        />
+      <div className="border-t border-border/60 p-2 flex items-center justify-end shrink-0">
         <button
-          type="submit"
-          className="h-8 w-8 inline-flex items-center justify-center rounded-md border border-border hover:bg-foreground/[0.05] disabled:opacity-40"
-          disabled={!draft.trim()}
-          aria-label="Add task"
+          type="button"
+          className="h-8 inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 text-[12px] hover:bg-foreground/[0.05]"
+          onClick={addTask}
         >
-          <CornerDownLeft className="h-3.5 w-3.5" />
+          <Plus className="h-3.5 w-3.5" />
+          Add task
         </button>
-      </form>
+      </div>
     </div>
   )
 }
 
-function parseTaskLines(source: string): TaskLine[] {
-  const out: TaskLine[] = []
-  const lines = source.split('\n')
-  for (let i = 0; i < lines.length; i++) {
-    const raw = lines[i]
-    const open = raw.match(/^\s*-\s+\[\s\]\s+(.*?)(\s*<!--\s*task:[a-zA-Z0-9_-]+\s*-->)?\s*$/)
-    if (open) {
-      out.push({ raw, index: i, done: false, text: open[1] })
-      continue
-    }
-    const done = raw.match(/^\s*-\s+\[x\]\s+(.*?)(\s*<!--\s*task:[a-zA-Z0-9_-]+\s*-->)?\s*$/i)
-    if (done) {
-      out.push({ raw, index: i, done: true, text: done[1] })
-    }
+function TaskRow({
+  task,
+  shouldFocus,
+  onFocusTask,
+  onUpdate,
+  onRemove,
+}: {
+  task: DayTask
+  shouldFocus: boolean
+  onFocusTask: (taskId: string | null) => void
+  onUpdate: (patch: Partial<DayTask>, immediate?: boolean) => void
+  onRemove: () => void
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!shouldFocus) return
+    inputRef.current?.focus()
+  }, [shouldFocus])
+
+  const cycleStatus = () => {
+    const currentIndex = STATUS_ORDER.indexOf(task.status)
+    const nextStatus = STATUS_ORDER[(currentIndex + 1) % STATUS_ORDER.length] ?? 'todo'
+    onUpdate({ status: nextStatus }, true)
   }
-  return out
+
+  const isMuted = task.status === 'completed' || task.status === 'canceled'
+  const statusMeta = STATUS_META[task.status] ?? STATUS_META.todo
+  const StatusIcon = statusMeta.icon
+
+  return (
+    <div className={['group/task flex items-center gap-2 px-2 py-1.5', isMuted ? 'opacity-55' : ''].join(' ')}>
+      <button
+        type="button"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground"
+        onClick={cycleStatus}
+        title={statusMeta.label}
+        aria-label={`Status: ${statusMeta.label}`}
+      >
+        <StatusIcon className="h-4 w-4" />
+      </button>
+      <input
+        ref={inputRef}
+        className={['h-8 min-w-0 flex-1 bg-transparent text-[13px] outline-none', isMuted ? 'line-through' : ''].join(' ')}
+        value={task.text}
+        placeholder="Task"
+        onFocus={() => onFocusTask(task.id)}
+        onChange={event => onUpdate({ text: event.target.value })}
+        onBlur={() => onUpdate({ text: task.text.trim() }, true)}
+        onKeyDown={event => {
+          if (event.key === 'Backspace' && task.text.length === 0) {
+            event.preventDefault()
+            onRemove()
+          }
+        }}
+      />
+      <button
+        type="button"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-foreground/[0.05] hover:text-foreground group-hover/task:opacity-100 focus:opacity-100"
+        onClick={onRemove}
+        aria-label="Remove task"
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  )
 }

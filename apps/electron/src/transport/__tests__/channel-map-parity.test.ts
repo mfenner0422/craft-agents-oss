@@ -30,7 +30,9 @@ type ApiToChannelMapKeys = Exclude<
   | 'getFilePath' // renderer-local — webUtils.getPathForFile, no IPC round-trip
   | 'openDaysInWorkspace' // direct IPC to main process — focuses Days in workspace window
   | 'closeDaysTrayPopover' // direct IPC to main process — hides the menubar popover
+  | 'showDaysTrayPopoverMenu' // direct IPC to main process — opens native tray menu from popover
   | 'onDaysTrayMode' // direct IPC listener — anchored/detached state changes
+  | 'onDaysTrayNavigate' // direct IPC listener — tray requests main-window Days navigation
 > | BrowserPaneKeys
 type ChannelMapKeys = keyof typeof CHANNEL_MAP & string
 

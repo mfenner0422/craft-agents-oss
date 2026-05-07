@@ -428,10 +428,16 @@ client.onConnectionStateChanged((state) => {
 ;(api as ElectronAPI).openDaysInWorkspace = (workspaceId: string, dateISO?: string) =>
   ipcRenderer.invoke('daysTray:openDays', workspaceId, dateISO)
 ;(api as ElectronAPI).closeDaysTrayPopover = () => ipcRenderer.invoke('daysTray:closePopover')
+;(api as ElectronAPI).showDaysTrayPopoverMenu = () => ipcRenderer.invoke('daysTray:showPopoverMenu')
 ;(api as ElectronAPI).onDaysTrayMode = (cb: (mode: 'anchored' | 'detached') => void) => {
   const handler = (_e: any, mode: 'anchored' | 'detached') => cb(mode)
   ipcRenderer.on('daysTray:mode', handler)
   return () => { ipcRenderer.removeListener('daysTray:mode', handler) }
+}
+;(api as ElectronAPI).onDaysTrayNavigate = (cb: (dateISO?: string) => void) => {
+  const handler = (_e: any, dateISO?: string) => cb(dateISO)
+  ipcRenderer.on('daysTray:navigateToDays', handler)
+  return () => { ipcRenderer.removeListener('daysTray:navigateToDays', handler) }
 }
 
 // webUtils.getPathForFile: returns the absolute OS path of a File object obtained

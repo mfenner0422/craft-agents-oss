@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ExternalLink, X } from 'lucide-react'
-import type { DayRecord, DayTask } from '@craft-agent/shared/days'
+import type { DayFileKind, DayRecord, DayTask, DaysBoardRecord } from '@craft-agent/shared/days'
 import { addDays, todayDateISO } from '@craft-agent/shared/days/date'
 import { WeekStrip } from './WeekStrip'
 import { TasksTab } from './TasksTab'
@@ -10,17 +10,19 @@ interface Props {
   initialWorkspaceId: string
 }
 
-type Tab = 'tasks' | 'notes'
 type Mode = 'anchored' | 'detached'
+type Tab = 'tasks' | 'notes'
+type TaskLists = DaysBoardRecord['tasks']
 
 export function DaysTrayPopover({ initialWorkspaceId }: Props) {
   const [workspaceId] = useState(initialWorkspaceId)
   const [selectedDate, setSelectedDate] = useState(todayDateISO())
-  const [day, setDay] = useState<DayRecord | null>(null)
+  const [day, setDay] = useState<DaysBoardRecord | null>(null)
   const [carryForward, setCarryForward] = useState<DayTask[]>([])
   const [tab, setTab] = useState<Tab>('tasks')
   const [weekOpen, setWeekOpen] = useState(false)
   const [mode, setMode] = useState<Mode>('anchored')
+  const [carryForwardDismissedKey, setCarryForwardDismissedKey] = useState<string | null>(null)
 
   useEffect(() => {
     return window.electronAPI.onDaysTrayMode?.((value) => setMode(value))
@@ -29,7 +31,7 @@ export function DaysTrayPopover({ initialWorkspaceId }: Props) {
   const reload = useCallback(async () => {
     if (!workspaceId) return
     try {
-      const record = await window.electronAPI.getDay(workspaceId, selectedDate)
+      const record = await loadDaysBoard(workspaceId, selectedDate)
       setDay(record ?? defaultDayRecord(selectedDate))
     } catch {
       setDay(defaultDayRecord(selectedDate))
@@ -58,22 +60,38 @@ export function DaysTrayPopover({ initialWorkspaceId }: Props) {
     if (!workspaceId || carryForward.length === 0) return
     await window.electronAPI.pullForwardDayTasks(workspaceId, addDays(selectedDate, -1), selectedDate)
     setCarryForward([])
+    setCarryForwardDismissedKey(null)
     await reload()
   }, [workspaceId, selectedDate, carryForward.length, reload])
 
-  const onUpdateFile = useCallback(async (kind: 'tasks' | 'journal', content: string) => {
+  const onUpdateFile = useCallback(async (kind: DayFileKind, content: string) => {
     if (!workspaceId) return
     await window.electronAPI.ensureDay(workspaceId, selectedDate)
-    const updated = await window.electronAPI.updateDayFile(workspaceId, selectedDate, kind, content)
+    await window.electronAPI.updateDayFile(workspaceId, selectedDate, kind, content)
+    setDay(await loadDaysBoard(workspaceId, selectedDate))
+  }, [workspaceId, selectedDate])
+
+  const onUpdateTaskLists = useCallback(async (payload: TaskLists) => {
+    if (!workspaceId) return
+    await window.electronAPI.ensureDay(workspaceId, selectedDate)
+    const updated = await window.electronAPI.updateDayTaskLists(workspaceId, selectedDate, payload)
     setDay(updated)
   }, [workspaceId, selectedDate])
 
   const headerLabel = useMemo(() => formatHeaderDate(selectedDate), [selectedDate])
   const isToday = selectedDate === todayDateISO()
+  const carryForwardKey = `${selectedDate}:${carryForward.map(task => task.id).join(',')}`
+  const visibleCarryForward = carryForwardDismissedKey === carryForwardKey ? [] : carryForward
 
   return (
-    <main className="h-screen w-screen bg-background text-foreground border border-border/60 shadow-2xl flex flex-col text-[13px]">
-      <header className="h-11 px-3 flex items-center justify-between border-b border-border/60 [-webkit-app-region:drag] shrink-0">
+    <main className="h-screen w-screen bg-background text-foreground border border-border/60 shadow-strong flex flex-col text-[13px]">
+      <header
+        className="h-12 px-3 flex items-center justify-between border-b border-border/60 [-webkit-app-region:drag] cursor-move shrink-0"
+        onContextMenu={(event) => {
+          event.preventDefault()
+          void window.electronAPI.showDaysTrayPopoverMenu?.()
+        }}
+      >
         <button
           type="button"
           className="[-webkit-app-region:no-drag] flex items-center gap-1.5 rounded-md px-1.5 py-1 hover:bg-foreground/[0.05] text-left"
@@ -115,7 +133,7 @@ export function DaysTrayPopover({ initialWorkspaceId }: Props) {
         />
       )}
 
-      <div className="px-3 pt-2 border-b border-border/60 shrink-0">
+      <div className="px-3 py-2 border-b border-border/60 shrink-0">
         <div className="inline-flex rounded-md border border-border/70 overflow-hidden text-[12px]">
           <TabButton active={tab === 'tasks'} onClick={() => setTab('tasks')}>Tasks</TabButton>
           <TabButton active={tab === 'notes'} onClick={() => setTab('notes')}>Notes</TabButton>
@@ -125,18 +143,17 @@ export function DaysTrayPopover({ initialWorkspaceId }: Props) {
       <div className="flex-1 min-h-0 overflow-y-auto">
         {tab === 'tasks' ? (
           <TasksTab
-            workspaceId={workspaceId}
             day={day}
-            dateISO={selectedDate}
-            carryForward={carryForward}
+            carryForward={visibleCarryForward}
+            onDismissCarryForward={() => setCarryForwardDismissedKey(carryForwardKey)}
             onPullForward={onPullForward}
-            onUpdateFile={(content) => onUpdateFile('tasks', content)}
+            onUpdateTaskLists={onUpdateTaskLists}
           />
         ) : (
           <NotesTab
             day={day}
             dateISO={selectedDate}
-            onUpdateFile={(content) => onUpdateFile('journal', content)}
+            onUpdateFile={onUpdateFile}
           />
         )}
       </div>
@@ -156,7 +173,7 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   )
 }
 
-function defaultDayRecord(dateISO: string): DayRecord {
+function defaultDayRecord(dateISO: string): DaysBoardRecord {
   return {
     dateISO,
     files: {
@@ -164,7 +181,73 @@ function defaultDayRecord(dateISO: string): DayRecord {
       scratch: '# Scratch\n',
       journal: '# Journal\n',
     },
+    bodies: {
+      tasks: '',
+      scratch: '',
+      journal: '',
+    },
+    tasks: {
+      today: [],
+      next: [],
+      someday: [],
+    },
   }
+}
+
+async function loadDaysBoard(workspaceId: string, dateISO: string): Promise<DaysBoardRecord | null> {
+  if (window.electronAPI.isChannelAvailable('days:getBoard')) {
+    try {
+      return await window.electronAPI.getDaysBoard(workspaceId, dateISO)
+    } catch {
+      // The renderer can briefly outpace the main process during hot reload.
+    }
+  }
+  const record = await window.electronAPI.getDay(workspaceId, dateISO)
+  return record ? dayRecordToBoard(record) : null
+}
+
+function dayRecordToBoard(record: DayRecord): DaysBoardRecord {
+  const bodies = record.bodies ?? {
+    tasks: stripManagedTitle(record.files.tasks),
+    scratch: stripManagedTitle(record.files.scratch),
+    journal: stripManagedTitle(record.files.journal),
+  }
+  return {
+    ...record,
+    bodies,
+    tasks: {
+      today: parseFallbackTaskList(bodies.tasks),
+      next: [],
+      someday: [],
+    },
+  }
+}
+
+function stripManagedTitle(content: string): string {
+  return content.replace(/^\s*#\s+[^\n]*\n?/, '').replace(/^\n/, '')
+}
+
+function parseFallbackTaskList(content: string): DayTask[] {
+  const markerToStatus: Record<string, DayTask['status']> = {
+    ' ': 'todo',
+    '/': 'in_progress',
+    '>': 'delegated',
+    x: 'completed',
+    X: 'completed',
+    '-': 'canceled',
+  }
+  return content.split('\n').flatMap((line, index) => {
+    const match = line.match(/^\s*-\s+\[([ xX/>-])\]\s+(.*?)(?:\s*<!--\s*task:([a-zA-Z0-9_-]+)\s*-->)?\s*$/)
+    if (!match) return []
+    const text = (match[2] ?? '').trim()
+    if (!text) return []
+    return [{
+      id: match[3] ?? `${index}-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`,
+      text,
+      status: markerToStatus[match[1] ?? ' '] ?? 'todo',
+      line,
+    }]
+  })
 }
 
 function formatHeaderDate(dateISO: string): string {

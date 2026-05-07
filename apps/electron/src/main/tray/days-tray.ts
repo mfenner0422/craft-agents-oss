@@ -27,7 +27,6 @@ export class DaysTray {
     this.tray = new Tray(buildCalendarIcon(new Date().getDate()))
     this.tray.setToolTip('Days')
     this.currentDayOfMonth = new Date().getDate()
-    this.attachContextMenu()
 
     this.tray.on('click', () => {
       const bounds = this.tray?.getBounds()
@@ -69,9 +68,8 @@ export class DaysTray {
     this.popover.closeFromRenderer()
   }
 
-  private attachContextMenu(): void {
-    if (!this.tray) return
-    this.tray.setContextMenu(this.buildContextMenu())
+  showPopoverContextMenu(): void {
+    this.tray?.popUpContextMenu(this.buildContextMenu())
   }
 
   private buildContextMenu(): Menu {

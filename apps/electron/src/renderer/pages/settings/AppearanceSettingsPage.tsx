@@ -16,6 +16,7 @@ import { EditPopover, EditButton, getEditConfig } from '@/components/ui/EditPopo
 import { useTheme } from '@/context/ThemeContext'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { routes } from '@/lib/navigate'
+import { isMac } from '@/lib/platform'
 import { Monitor, Sun, Moon } from 'lucide-react'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { ToolIconMapping } from '../../../shared/types'
@@ -147,14 +148,13 @@ export default function AppearanceSettingsPage() {
   }, [])
 
   // Days menubar toggles (macOS only)
-  const isMac = typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac')
   const [daysTrayEnabled, setDaysTrayEnabled] = useState(true)
   const [daysTrayAlwaysOnTop, setDaysTrayAlwaysOnTop] = useState(true)
   useEffect(() => {
     if (!isMac) return
     window.electronAPI?.getDaysTrayEnabled?.().then(setDaysTrayEnabled).catch(() => {})
     window.electronAPI?.getDaysTrayDetachedAlwaysOnTop?.().then(setDaysTrayAlwaysOnTop).catch(() => {})
-  }, [isMac])
+  }, [])
   const handleDaysTrayEnabledChange = useCallback(async (checked: boolean) => {
     setDaysTrayEnabled(checked)
     await window.electronAPI?.setDaysTrayEnabled?.(checked)

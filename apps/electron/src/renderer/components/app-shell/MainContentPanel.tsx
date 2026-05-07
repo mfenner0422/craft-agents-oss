@@ -220,17 +220,17 @@ export function MainContentPanel({
     return {
       dateISO,
       files: {
-        tasks: '# Today\n\n- [ ] Plan the day\n',
+        tasks: '# Today\n',
         scratch: '# Scratch\n',
         journal: '# Journal\n',
       },
       bodies: {
-        tasks: '- [ ] Plan the day\n',
+        tasks: '',
         scratch: '',
         journal: '',
       },
       tasks: {
-        today: [{ id: 'plan-the-day', text: 'Plan the day', status: 'todo' }],
+        today: [],
         next: [],
         someday: [],
       },

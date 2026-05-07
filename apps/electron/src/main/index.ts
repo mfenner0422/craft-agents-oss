@@ -769,14 +769,17 @@ app.whenReady().then(async () => {
 
         if (storage.getDaysTrayEnabled()) startTray()
 
-        ipcMain.handle('daysTray:openDays', async (_event, workspaceId: string, _dateISO?: string) => {
+        ipcMain.handle('daysTray:openDays', async (_event, workspaceId: string, dateISO?: string) => {
           if (!workspaceId || !windowManager) return
           const win = windowManager.focusOrCreateWindow(workspaceId)
-          win.webContents.send('daysTray:navigateToDays')
+          win.webContents.send('daysTray:navigateToDays', dateISO)
           daysTray?.closePopoverFromRenderer()
         })
         ipcMain.handle('daysTray:closePopover', async () => {
           daysTray?.closePopoverFromRenderer()
+        })
+        ipcMain.handle('daysTray:showPopoverMenu', async () => {
+          daysTray?.showPopoverContextMenu()
         })
 
         // Track focused workspace so tray click respects last-focused window

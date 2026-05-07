@@ -123,6 +123,7 @@ export function DaysMainPane({ day, carryForwardTasks = [], onPullForward, onUpd
   const [scratch, setScratch] = React.useState(day?.bodies.scratch ?? '');
   const [journal, setJournal] = React.useState(day?.bodies.journal ?? '');
   const [focusedTaskId, setFocusedTaskId] = React.useState<string | null>(null);
+  const [carryForwardDismissed, setCarryForwardDismissed] = React.useState(false);
   const saveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const noteTimerRef = React.useRef<Record<'scratch' | 'journal', ReturnType<typeof setTimeout> | null>>({ scratch: null, journal: null });
 
@@ -132,6 +133,10 @@ export function DaysMainPane({ day, carryForwardTasks = [], onPullForward, onUpd
     setScratch(day.bodies.scratch);
     setJournal(day.bodies.journal);
   }, [day]);
+
+  React.useEffect(() => {
+    setCarryForwardDismissed(false);
+  }, [day?.dateISO, carryForwardTasks.length]);
 
   React.useEffect(() => () => {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -207,15 +212,25 @@ export function DaysMainPane({ day, carryForwardTasks = [], onPullForward, onUpd
             </button>
           </div>
         </div>
-      {carryForwardTasks.length > 0 && (
+      {carryForwardTasks.length > 0 && !carryForwardDismissed && (
         <div className="mb-5 rounded-md border border-border bg-foreground/[0.03] px-3 py-2 flex items-center justify-between gap-3">
           <div className="min-w-0">
             <div className="text-sm font-medium">{carryForwardTasks.length} unfinished task{carryForwardTasks.length === 1 ? '' : 's'} from yesterday</div>
             <div className="text-xs text-muted-foreground truncate">{carryForwardTasks.map(task => task.text).join(', ')}</div>
           </div>
-          <button type="button" className="shrink-0 rounded-md border border-border px-2 py-1 text-xs hover:bg-foreground/[0.05]" onClick={onPullForward}>
-            Pull forward
-          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            <button type="button" className="rounded-md border border-border px-2 py-1 text-xs hover:bg-foreground/[0.05]" onClick={onPullForward}>
+              Pull forward
+            </button>
+            <button
+              type="button"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground"
+              onClick={() => setCarryForwardDismissed(true)}
+              aria-label="Dismiss pull-forward suggestion"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       )}
         <div className="grid gap-6">

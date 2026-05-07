@@ -578,7 +578,9 @@ export interface ElectronAPI {
   // Days tray popover — direct-IPC actions (not workspace-routed RPC)
   openDaysInWorkspace(workspaceId: string, dateISO?: string): Promise<void>
   closeDaysTrayPopover(): Promise<void>
+  showDaysTrayPopoverMenu(): Promise<void>
   onDaysTrayMode(callback: (mode: 'anchored' | 'detached') => void): () => void
+  onDaysTrayNavigate(callback: (dateISO?: string) => void): () => void
 
   // Prompt caching & context
   getExtendedPromptCache(): Promise<boolean>

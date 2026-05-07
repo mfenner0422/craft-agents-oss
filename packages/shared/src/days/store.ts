@@ -14,7 +14,7 @@ const MANAGED_TITLES: Record<DayFileKind | SharedTaskListKind, string> = {
   someday: 'Someday',
 };
 const BUNDLED_TEMPLATES: Record<DayFileKind, string> = {
-  tasks: '# Today\n\n- [ ] Plan the day\n',
+  tasks: '# Today\n',
   scratch: '# Scratch\n',
   journal: '# Journal\n',
 };
