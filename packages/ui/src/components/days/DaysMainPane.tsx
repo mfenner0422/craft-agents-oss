@@ -87,6 +87,19 @@ class SmartPointerSensor extends PointerSensor {
   ];
 }
 
+class SmartKeyboardSensor extends KeyboardSensor {
+  static activators = [
+    {
+      eventName: 'onKeyDown' as const,
+      handler: (event: React.KeyboardEvent<Element>, ...rest: unknown[]) => {
+        if (hasNoDndAncestor(event.target as HTMLElement)) return false;
+        const baseHandler = (KeyboardSensor.activators[0] as { handler: Function }).handler;
+        return baseHandler(event, ...rest);
+      },
+    },
+  ];
+}
+
 const DROP_DURATION = 250;
 
 const dropAnimationConfig: DropAnimation = {
@@ -273,7 +286,7 @@ function TaskBoard({
 
   const sensors = useSensors(
     useSensor(SmartPointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(KeyboardSensor),
+    useSensor(SmartKeyboardSensor),
   );
 
   const addTask = () => {
