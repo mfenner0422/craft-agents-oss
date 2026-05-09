@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import { Inbox, Calendar, Layers, X } from 'lucide-react'
 import '../index.css'
@@ -9,13 +9,31 @@ function getWorkspaceId(): string {
   return new URLSearchParams(window.location.search).get('workspaceId') ?? ''
 }
 
+function getPrefill(): { url: string; title: string; body: string } {
+  const params = new URLSearchParams(window.location.search)
+  return {
+    url: params.get('url') ?? '',
+    title: params.get('title') ?? '',
+    body: params.get('body') ?? '',
+  }
+}
+
 function CaptureWindow() {
   const workspaceId = useMemo(getWorkspaceId, [])
-  const [url, setUrl] = useState('')
-  const [title, setTitle] = useState('')
-  const [body, setBody] = useState('')
+  const prefill = useMemo(getPrefill, [])
+  const [url, setUrl] = useState(prefill.url)
+  const [title, setTitle] = useState(prefill.title)
+  const [body, setBody] = useState(prefill.body)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const urlInputRef = useRef<HTMLInputElement>(null)
+  const bodyTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const hasPrefill = !!(prefill.url || prefill.title)
+
+  useEffect(() => {
+    if (hasPrefill) bodyTextareaRef.current?.focus()
+    else urlInputRef.current?.focus()
+  }, [hasPrefill])
 
   const hasContent = !!(url.trim() || title.trim() || body.trim())
 
@@ -56,11 +74,11 @@ function CaptureWindow() {
       </header>
       <section className="p-3 flex flex-col gap-2">
         <input
+          ref={urlInputRef}
           className="h-9 rounded-md border border-border bg-background px-2 text-[13px] outline-none focus:ring-1 focus:ring-ring"
           value={url}
           onChange={(event) => setUrl(event.target.value)}
           placeholder="URL"
-          autoFocus
         />
         <input
           className="h-9 rounded-md border border-border bg-background px-2 text-[13px] outline-none focus:ring-1 focus:ring-ring"
@@ -69,6 +87,7 @@ function CaptureWindow() {
           placeholder="Title"
         />
         <textarea
+          ref={bodyTextareaRef}
           className="min-h-[118px] resize-none rounded-md border border-border bg-background p-2 text-[13px] outline-none focus:ring-1 focus:ring-ring"
           value={body}
           onChange={(event) => setBody(event.target.value)}

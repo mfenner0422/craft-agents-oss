@@ -1,14 +1,19 @@
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from './handler-deps'
-import { DEFAULT_CAPTURE_HOTKEY } from '@craft-agent/shared/config/preferences'
+import { DEFAULT_CAPTURE_HOTKEY, DEFAULT_CAPTURE_AUTOFILL_HOTKEY } from '@craft-agent/shared/config/preferences'
 
 type CaptureHotkeyBinder = (accelerator: string) => Promise<{ ok: boolean; error?: string }> | { ok: boolean; error?: string }
 
 let captureHotkeyBinder: CaptureHotkeyBinder = () => ({ ok: true })
+let captureAutofillHotkeyBinder: CaptureHotkeyBinder = () => ({ ok: true })
 
 export function setCaptureHotkeyBinder(binder: CaptureHotkeyBinder): void {
   captureHotkeyBinder = binder
+}
+
+export function setCaptureAutofillHotkeyBinder(binder: CaptureHotkeyBinder): void {
+  captureAutofillHotkeyBinder = binder
 }
 
 export const GUI_HANDLED_CHANNELS = [
@@ -16,6 +21,8 @@ export const GUI_HANDLED_CHANNELS = [
   RPC_CHANNELS.settings.SET_NETWORK_PROXY,
   RPC_CHANNELS.app.GET_CAPTURE_HOTKEY,
   RPC_CHANNELS.app.SET_CAPTURE_HOTKEY,
+  RPC_CHANNELS.app.GET_CAPTURE_AUTOFILL_HOTKEY,
+  RPC_CHANNELS.app.SET_CAPTURE_AUTOFILL_HOTKEY,
 ] as const
 
 // ============================================================
@@ -63,6 +70,33 @@ export function registerSettingsGuiHandlers(server: RpcServer, _deps: HandlerDep
 
     savePreferences({ ...prefs, captureHotkey: trimmed })
     server.push(RPC_CHANNELS.app.CAPTURE_HOTKEY_CHANGED, { to: 'all' }, trimmed)
+    return { ok: true }
+  })
+
+  server.handle(RPC_CHANNELS.app.GET_CAPTURE_AUTOFILL_HOTKEY, async () => {
+    const { loadPreferences } = await import('@craft-agent/shared/config/preferences')
+    return loadPreferences().captureAutofillHotkey ?? DEFAULT_CAPTURE_AUTOFILL_HOTKEY
+  })
+
+  server.handle(RPC_CHANNELS.app.SET_CAPTURE_AUTOFILL_HOTKEY, async (_ctx, accelerator: string) => {
+    const trimmed = accelerator.trim()
+    if (!trimmed || !/^[A-Za-z0-9+ -]+$/.test(trimmed)) {
+      return { ok: false, error: 'invalid' }
+    }
+
+    const { loadPreferences, savePreferences } = await import('@craft-agent/shared/config/preferences')
+    const prefs = loadPreferences()
+    const bindResult = await captureAutofillHotkeyBinder(trimmed)
+    if (!bindResult.ok) {
+      server.push(RPC_CHANNELS.app.CAPTURE_AUTOFILL_HOTKEY_CONFLICT, { to: 'all' }, {
+        accelerator: trimmed,
+        error: bindResult.error ?? 'conflict',
+      })
+      return { ok: false, error: bindResult.error ?? 'conflict' }
+    }
+
+    savePreferences({ ...prefs, captureAutofillHotkey: trimmed })
+    server.push(RPC_CHANNELS.app.CAPTURE_AUTOFILL_HOTKEY_CHANGED, { to: 'all' }, trimmed)
     return { ok: true }
   })
 }

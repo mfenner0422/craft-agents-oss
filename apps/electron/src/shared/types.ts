@@ -432,6 +432,10 @@ export interface ElectronAPI {
   setCaptureHotkey(accelerator: string): Promise<{ ok: boolean; error?: string }>
   onCaptureHotkeyChanged(callback: (accelerator: string) => void): () => void
   onCaptureHotkeyConflict(callback: (payload: { accelerator: string; error: string }) => void): () => void
+  getCaptureAutofillHotkey(): Promise<string>
+  setCaptureAutofillHotkey(accelerator: string): Promise<{ ok: boolean; error?: string }>
+  onCaptureAutofillHotkeyChanged(callback: (accelerator: string) => void): () => void
+  onCaptureAutofillHotkeyConflict(callback: (payload: { accelerator: string; error: string }) => void): () => void
   saveCapture(input: { workspaceId: string; source: string; url?: string; title?: string; body: string; tags?: string[] }): Promise<import('@craft-agent/shared/capture').CaptureItem>
   listCaptureInbox(workspaceId: string, limit?: number): Promise<import('@craft-agent/shared/capture').CaptureItem[]>
   deleteCapture(workspaceId: string, itemId: string): Promise<void>

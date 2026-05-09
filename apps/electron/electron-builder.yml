@@ -85,6 +85,8 @@ mac:
   # The value must match --app-icon used in actool (see afterPack.js)
   extendInfo:
     CFBundleIconName: AppIcon
+    NSAppleEventsUsageDescription: >-
+      Craft Agents reads the URL and title of the frontmost browser tab when you trigger Quick Capture with Autofill.
   target:
     - target: dmg
       arch:

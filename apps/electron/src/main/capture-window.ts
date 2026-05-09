@@ -3,11 +3,17 @@ import { join } from 'node:path'
 
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
 
+export interface CapturePrefill {
+  url?: string
+  title?: string
+  body?: string
+}
+
 let captureWindow: BrowserWindow | null = null
 
-export function openCaptureWindow(workspaceId: string): void {
+export function openCaptureWindow(workspaceId: string, prefill?: CapturePrefill): void {
   if (captureWindow && !captureWindow.isDestroyed()) {
-    captureWindow.loadURL(buildCaptureUrl(workspaceId))
+    captureWindow.loadURL(buildCaptureUrl(workspaceId, prefill))
     captureWindow.show()
     captureWindow.focus()
     return
@@ -42,11 +48,15 @@ export function openCaptureWindow(workspaceId: string): void {
     shell.openExternal(details.url)
     return { action: 'deny' }
   })
-  void captureWindow.loadURL(buildCaptureUrl(workspaceId))
+  void captureWindow.loadURL(buildCaptureUrl(workspaceId, prefill))
 }
 
-function buildCaptureUrl(workspaceId: string): string {
-  const params = new URLSearchParams({ workspaceId }).toString()
-  if (VITE_DEV_SERVER_URL) return `${VITE_DEV_SERVER_URL}/capture.html?${params}`
-  return `file://${join(__dirname, 'renderer/capture.html')}?${params}`
+function buildCaptureUrl(workspaceId: string, prefill?: CapturePrefill): string {
+  const params = new URLSearchParams({ workspaceId })
+  if (prefill?.url) params.set('url', prefill.url)
+  if (prefill?.title) params.set('title', prefill.title)
+  if (prefill?.body) params.set('body', prefill.body)
+  const query = params.toString()
+  if (VITE_DEV_SERVER_URL) return `${VITE_DEV_SERVER_URL}/capture.html?${query}`
+  return `file://${join(__dirname, 'renderer/capture.html')}?${query}`
 }

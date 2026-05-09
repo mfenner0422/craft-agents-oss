@@ -710,20 +710,27 @@ app.whenReady().then(async () => {
 
       // Capture module-level references for before-quit cleanup and deep-link handlers
       sessionManager = instance.sessionManager
-      const [{ CaptureManager }, { openCaptureWindow }, { DEFAULT_CAPTURE_HOTKEY, loadPreferences }, { setCaptureHotkeyBinder }] = await Promise.all([
+      const [{ CaptureManager }, { openCaptureWindow }, { DEFAULT_CAPTURE_HOTKEY, DEFAULT_CAPTURE_AUTOFILL_HOTKEY, loadPreferences }, { setCaptureHotkeyBinder, setCaptureAutofillHotkeyBinder }] = await Promise.all([
         import('./capture-manager'),
         import('./capture-window'),
         import('@craft-agent/shared/config/preferences'),
         import('./handlers/settings'),
       ])
+      const prefs = loadPreferences()
       captureManager = new CaptureManager({
-        initialHotkey: loadPreferences().captureHotkey ?? DEFAULT_CAPTURE_HOTKEY,
+        initialHotkey: prefs.captureHotkey ?? DEFAULT_CAPTURE_HOTKEY,
+        initialAutofillHotkey: prefs.captureAutofillHotkey ?? DEFAULT_CAPTURE_AUTOFILL_HOTKEY,
         getWorkspaces: () => sessionManager?.getWorkspaces() ?? [],
         getWorkspaceForWindow: (webContentsId) => windowManager?.getWorkspaceForWindow(webContentsId) ?? null,
         openCaptureWindow,
+        openCaptureWindowWithAutofill: (workspaceId, ctx) => openCaptureWindow(workspaceId, {
+          url: ctx.url,
+          title: ctx.title,
+        }),
       })
       captureManager.start()
       setCaptureHotkeyBinder((accelerator) => captureManager?.setHotkey(accelerator) ?? { ok: false, error: 'unavailable' })
+      setCaptureAutofillHotkeyBinder((accelerator) => captureManager?.setAutofillHotkey(accelerator) ?? { ok: false, error: 'unavailable' })
       sessionManager.setOnWorkspaceConfigChange(() => captureManager?.refreshTargetWorkspaces())
 
       instance.wsServer.handle(RPC_CHANNELS.capture.OPEN, async (_ctx, workspaceId: string) => {

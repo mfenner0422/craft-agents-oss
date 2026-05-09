@@ -75,4 +75,8 @@ export interface BroadcastEventMap {
   // Messaging gateway broadcasts
   [RPC_CHANNELS.messaging.BINDING_CHANGED]: [workspaceId: string]
   [RPC_CHANNELS.messaging.PLATFORM_STATUS]: [workspaceId: string, platform: string, connected: boolean]
+
+  // Capture autofill hotkey broadcasts (global)
+  [RPC_CHANNELS.app.CAPTURE_AUTOFILL_HOTKEY_CHANGED]: [accelerator: string]
+  [RPC_CHANNELS.app.CAPTURE_AUTOFILL_HOTKEY_CONFLICT]: [payload: { accelerator: string; error: string }]
 }

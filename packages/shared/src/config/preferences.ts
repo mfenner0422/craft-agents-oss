@@ -35,13 +35,15 @@ export interface UserPreferences {
   // Whether to include Co-Authored-By trailer on git commits (default: true)
   includeCoAuthoredBy?: boolean;
   captureHotkey?: string;
+  captureAutofillHotkey?: string;
   // When the preferences were last updated
   updatedAt?: number;
 }
 
 const PREFERENCES_FILE = join(CONFIG_DIR, 'preferences.json');
 export const DEFAULT_CAPTURE_HOTKEY = 'CommandOrControl+Alt+Space';
-export const UI_ONLY_PREFERENCE_KEYS = new Set<keyof UserPreferences>(['captureHotkey']);
+export const DEFAULT_CAPTURE_AUTOFILL_HOTKEY = 'CommandOrControl+Alt+Shift+Space';
+export const UI_ONLY_PREFERENCE_KEYS = new Set<keyof UserPreferences>(['captureHotkey', 'captureAutofillHotkey']);
 
 export function loadPreferences(): UserPreferences {
   try {

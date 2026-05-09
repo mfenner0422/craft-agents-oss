@@ -2,30 +2,38 @@ import { app, BrowserWindow, globalShortcut } from 'electron'
 import type { Workspace } from '@craft-agent/shared/config/storage'
 import { loadWorkspaceConfig } from '@craft-agent/shared/workspaces'
 import { mainLog } from './logger'
+import { getFrontmostBrowserContext, type AutofillContext } from './app-context'
 
 export interface CaptureManagerOptions {
   initialHotkey: string
+  initialAutofillHotkey?: string
   getWorkspaces: () => Workspace[]
   getWorkspaceForWindow: (webContentsId: number) => string | null
   openCaptureWindow: (workspaceId: string) => void
+  openCaptureWindowWithAutofill?: (workspaceId: string, ctx: AutofillContext) => void
 }
 
 export class CaptureManager {
   private hotkey: string
+  private autofillHotkey: string | null
   private readonly getWorkspaces: () => Workspace[]
   private readonly getWorkspaceForWindow: (webContentsId: number) => string | null
   private readonly openCaptureWindow: (workspaceId: string) => void
+  private readonly openCaptureWindowWithAutofill: ((workspaceId: string, ctx: AutofillContext) => void) | null
   private readonly mruWorkspaceIds: string[] = []
   private lastFocusedWebContentsId: number | null = null
   private activeWorkspaceId: string | null = null
   private bound = false
+  private autofillBound = false
   private trackingInstalled = false
 
   constructor(options: CaptureManagerOptions) {
     this.hotkey = options.initialHotkey
+    this.autofillHotkey = options.initialAutofillHotkey ?? null
     this.getWorkspaces = options.getWorkspaces
     this.getWorkspaceForWindow = options.getWorkspaceForWindow
     this.openCaptureWindow = options.openCaptureWindow
+    this.openCaptureWindowWithAutofill = options.openCaptureWindowWithAutofill ?? null
   }
 
   start(): void {
@@ -47,6 +55,20 @@ export class CaptureManager {
     return { ok: true }
   }
 
+  setAutofillHotkey(accelerator: string): { ok: boolean; error?: string } {
+    const previous = this.autofillHotkey
+    const wasBound = this.autofillBound
+    if (wasBound && previous) globalShortcut.unregister(previous)
+    this.autofillHotkey = accelerator
+    const result = this.hasEnabledWorkspace() ? this.bindAutofill(accelerator) : { ok: true }
+    if (!result.ok) {
+      this.autofillHotkey = previous
+      if (wasBound && previous) this.bindAutofill(previous)
+      return result
+    }
+    return { ok: true }
+  }
+
   setActiveWorkspaceId(workspaceId: string): void {
     this.activeWorkspaceId = workspaceId
     this.rememberWorkspace(workspaceId)
@@ -58,6 +80,10 @@ export class CaptureManager {
         globalShortcut.unregister(this.hotkey)
         this.bound = false
       }
+      if (this.autofillBound && this.autofillHotkey) {
+        globalShortcut.unregister(this.autofillHotkey)
+        this.autofillBound = false
+      }
       return
     }
 
@@ -67,12 +93,22 @@ export class CaptureManager {
         mainLog.warn('[capture] Failed to register capture hotkey:', result.error)
       }
     }
+    if (!this.autofillBound && this.autofillHotkey && this.openCaptureWindowWithAutofill) {
+      const result = this.bindAutofill(this.autofillHotkey)
+      if (!result.ok) {
+        mainLog.warn('[capture] Failed to register capture autofill hotkey:', result.error)
+      }
+    }
   }
 
   dispose(): void {
     if (this.bound) {
       globalShortcut.unregister(this.hotkey)
       this.bound = false
+    }
+    if (this.autofillBound && this.autofillHotkey) {
+      globalShortcut.unregister(this.autofillHotkey)
+      this.autofillBound = false
     }
   }
 
@@ -86,6 +122,24 @@ export class CaptureManager {
       return registered ? { ok: true } : { ok: false, error: 'conflict' }
     } catch (error) {
       this.bound = false
+      return { ok: false, error: error instanceof Error ? error.message : 'invalid' }
+    }
+  }
+
+  private bindAutofill(accelerator: string): { ok: boolean; error?: string } {
+    if (!this.openCaptureWindowWithAutofill) return { ok: true }
+    try {
+      const registered = globalShortcut.register(accelerator, async () => {
+        const ctx = await getFrontmostBrowserContext()
+        const workspaceId = this.resolveTargetWorkspaceId()
+        if (workspaceId && this.openCaptureWindowWithAutofill) {
+          this.openCaptureWindowWithAutofill(workspaceId, ctx ?? {})
+        }
+      })
+      this.autofillBound = registered
+      return registered ? { ok: true } : { ok: false, error: 'conflict' }
+    } catch (error) {
+      this.autofillBound = false
       return { ok: false, error: error instanceof Error ? error.message : 'invalid' }
     }
   }

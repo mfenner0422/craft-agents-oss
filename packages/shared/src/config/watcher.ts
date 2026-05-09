@@ -103,6 +103,7 @@ export interface UserPreferences {
   language?: string;
   notes?: string;
   captureHotkey?: string;
+  captureAutofillHotkey?: string;
   updatedAt?: number;
 }
 

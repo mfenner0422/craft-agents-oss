@@ -265,6 +265,10 @@ export const RPC_CHANNELS = {
     SET_CAPTURE_HOTKEY: 'app:captureHotkey:set',
     CAPTURE_HOTKEY_CHANGED: 'app:captureHotkey:changed',
     CAPTURE_HOTKEY_CONFLICT: 'app:captureHotkey:conflict',
+    GET_CAPTURE_AUTOFILL_HOTKEY: 'app:captureAutofillHotkey:get',
+    SET_CAPTURE_AUTOFILL_HOTKEY: 'app:captureAutofillHotkey:set',
+    CAPTURE_AUTOFILL_HOTKEY_CHANGED: 'app:captureAutofillHotkey:changed',
+    CAPTURE_AUTOFILL_HOTKEY_CONFLICT: 'app:captureAutofillHotkey:conflict',
   },
   capture: {
     SAVE: 'capture:save',
