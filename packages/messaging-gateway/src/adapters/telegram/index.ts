@@ -141,6 +141,8 @@ export class TelegramAdapter implements PlatformAdapter {
   private messageHandler: ((msg: IncomingMessage) => Promise<void>) | null = null
   private buttonHandler: ((press: ButtonPress) => Promise<void>) | null = null
   private connected = false
+  private destroyed = false
+  private retryTimer: ReturnType<typeof setTimeout> | null = null
   private log: MessagingLogger = NOOP_LOGGER
 
   /**
@@ -330,30 +332,57 @@ export class TelegramAdapter implements PlatformAdapter {
       throw err
     }
 
-    // Launch polling in the background. grammY's bot.start() returns a
+    // Launch polling with auto-reconnect. grammY's bot.start() returns a
     // long-lived Promise that only resolves on stop() and rejects on fatal
     // polling errors (most commonly 409 Conflict from overlapping pollers
-    // sharing the same token). We MUST catch it so the rejection doesn't
-    // become an unhandled promise and so `connected` reflects reality.
-    this.bot.start({
-      onStart: () => {
-        this.connected = true
-        this.log.info('[telegram] polling started')
-        // Diagnostic: confirm webhook is really gone + show backlog once.
-        // Fire-and-forget; errors here are not fatal to polling.
-        this.bot?.api.getWebhookInfo().then(
-          (info) => this.log.info('[telegram] webhook state after start:', {
-            url: info.url || null,
-            pending_update_count: info.pending_update_count,
-          }),
-          () => {},
-        )
-      },
-    }).catch((err: unknown) => {
-      this.connected = false
-      this.log.error('[telegram] polling stopped with error:', describeError(err))
-    })
-    // Do NOT set this.connected = true here — wait for onStart.
+    // sharing the same token). On rejection we back off and retry — without
+    // this loop, a single transient 409 leaves the adapter permanently
+    // silent until the container restarts. destroy() sets `destroyed` to
+    // exit the loop cleanly.
+    void this.runPollingLoop()
+  }
+
+  private async runPollingLoop(): Promise<void> {
+    let attempt = 0
+    while (!this.destroyed) {
+      try {
+        await this.bot!.start({
+          onStart: () => {
+            this.connected = true
+            attempt = 0
+            this.log.info('[telegram] polling started')
+            // Diagnostic: confirm webhook is really gone + show backlog once.
+            this.bot?.api.getWebhookInfo().then(
+              (info) => this.log.info('[telegram] webhook state after start:', {
+                url: info.url || null,
+                pending_update_count: info.pending_update_count,
+              }),
+              () => {},
+            )
+          },
+        })
+        // bot.start() resolved → graceful stop. Exit loop.
+        this.connected = false
+        return
+      } catch (err) {
+        this.connected = false
+        this.log.error('[telegram] polling stopped with error:', describeError(err))
+        if (this.destroyed) return
+        attempt += 1
+        const delay = Math.min(30_000 * 2 ** Math.min(attempt - 1, 4), 300_000)
+        this.log.warn('[telegram] retrying polling after backoff', {
+          event: 'telegram_polling_retry_scheduled',
+          attempt,
+          delayMs: delay,
+        })
+        await new Promise<void>((resolve) => {
+          this.retryTimer = setTimeout(() => {
+            this.retryTimer = null
+            resolve()
+          }, delay)
+        })
+      }
+    }
   }
 
   /**
@@ -482,7 +511,12 @@ export class TelegramAdapter implements PlatformAdapter {
   }
 
   async destroy(): Promise<void> {
+    this.destroyed = true
     this.connected = false
+    if (this.retryTimer) {
+      clearTimeout(this.retryTimer)
+      this.retryTimer = null
+    }
     if (this.bot) {
       await this.bot.stop()
       this.bot = null
