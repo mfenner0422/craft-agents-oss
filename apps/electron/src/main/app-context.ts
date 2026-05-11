@@ -18,9 +18,11 @@ function logOnce(category: string, detail: string): void {
   mainLog.warn(`[autofill] ${category}: ${detail}`)
 }
 
-const JXA_SCRIPT = `
+export const FRONTMOST_BROWSER_CONTEXT_JXA = `
 (() => {
   const SystemEvents = Application('System Events')
+  const currentApp = Application.currentApplication()
+  currentApp.includeStandardAdditions = true
   const procs = SystemEvents.processes.whose({ frontmost: true })
   if (!procs || procs.length === 0) return JSON.stringify(null)
   const proc = procs[0]
@@ -28,6 +30,25 @@ const JXA_SCRIPT = `
   const appName = proc.name()
 
   const tryRead = (fn) => { try { return fn() } catch (_) { return undefined } }
+  const looksLikeUrl = (value) => typeof value === 'string' && /^[a-z][a-z0-9+.-]*:/i.test(value)
+  const readZenLocationBar = () => {
+    const previousClipboard = tryRead(() => currentApp.theClipboard())
+    const hadTextClipboard = typeof previousClipboard === 'string'
+    try {
+      const frontWindowTitle = tryRead(() => proc.windows[0].name())
+      SystemEvents.keystroke('l', { using: 'command down' })
+      delay(0.1)
+      SystemEvents.keystroke('c', { using: 'command down' })
+      delay(0.1)
+      const copied = tryRead(() => currentApp.theClipboard())
+      return {
+        url: looksLikeUrl(copied) ? copied : undefined,
+        title: frontWindowTitle,
+      }
+    } finally {
+      if (hadTextClipboard) tryRead(() => currentApp.setTheClipboardTo(previousClipboard))
+    }
+  }
 
   let url, title
   switch (bundleId) {
@@ -61,6 +82,17 @@ const JXA_SCRIPT = `
       title = tryRead(() => app.windows[0].activeTab.title())
       break
     }
+    case 'app.zen-browser.zen': {
+      const app = Application('Zen')
+      url = tryRead(() => app.windows[0].activeTab.url())
+      title = tryRead(() => app.windows[0].activeTab.title())
+      if (!url && !title) {
+        const fallback = readZenLocationBar()
+        url = fallback.url
+        title = fallback.title
+      }
+      break
+    }
     default:
       return JSON.stringify(null)
   }
@@ -73,7 +105,7 @@ const JXA_SCRIPT = `
 export async function getFrontmostBrowserContext(timeoutMs: number = 1500): Promise<AutofillContext | null> {
   if (process.platform !== 'darwin') return null
   try {
-    const { stdout } = await execFileAsync('osascript', ['-l', 'JavaScript', '-e', JXA_SCRIPT], {
+    const { stdout } = await execFileAsync('osascript', ['-l', 'JavaScript', '-e', FRONTMOST_BROWSER_CONTEXT_JXA], {
       timeout: timeoutMs,
       maxBuffer: 64 * 1024,
     })
