@@ -31,6 +31,7 @@ type ApiToChannelMapKeys = Exclude<
   | 'openDaysInWorkspace' // direct IPC to main process — focuses Days in workspace window
   | 'closeDaysTrayPopover' // direct IPC to main process — hides the menubar popover
   | 'showDaysTrayPopoverMenu' // direct IPC to main process — opens native tray menu from popover
+  | 'dragDaysTrayPopoverBy' // direct IPC to main process — detached popover manual drag fallback
   | 'onDaysTrayMode' // direct IPC listener — anchored/detached state changes
   | 'onDaysTrayNavigate' // direct IPC listener — tray requests main-window Days navigation
 > | BrowserPaneKeys

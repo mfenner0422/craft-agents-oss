@@ -7,6 +7,7 @@ const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
 const POPOVER_WIDTH = 360
 const POPOVER_HEIGHT = 480
 const DETACH_THRESHOLD_PX = 40
+const MAX_DRAG_DELTA_PX = 200
 
 export type PopoverMode = 'anchored' | 'detached'
 
@@ -23,6 +24,8 @@ export class TrayPopoverWindow {
   private workspaceId: string | null = null
   private blurHandler: (() => void) | null = null
   private moveHandler: (() => void) | null = null
+  private movedHandler: (() => void) | null = null
+  private detachPending: boolean = false
 
   constructor(private readonly options: PopoverOptions) {}
 
@@ -39,15 +42,25 @@ export class TrayPopoverWindow {
     this.window.hide()
   }
 
-  toggleAtTrayBounds(workspaceId: string | null, trayBounds: Rectangle): void {
+  dragBy(senderWebContentsId: number, deltaX: number, deltaY: number): void {
+    if (!this.window || this.window.isDestroyed()) return
+    if (this.window.webContents.id !== senderWebContentsId) return
+    if (!Number.isFinite(deltaX) || !Number.isFinite(deltaY)) return
+    if (Math.abs(deltaX) > MAX_DRAG_DELTA_PX || Math.abs(deltaY) > MAX_DRAG_DELTA_PX) return
+
+    const bounds = this.window.getBounds()
+    this.window.setPosition(Math.round(bounds.x + deltaX), Math.round(bounds.y + deltaY), false)
+  }
+
+  toggleAtTrayBounds(workspaceId: string | null, trayBounds: Rectangle, options: { focusOnShow?: boolean } = {}): void {
     if (this.isVisible() && this.mode === 'anchored') {
       this.hide()
       return
     }
-    this.showAnchored(workspaceId, trayBounds)
+    this.showAnchored(workspaceId, trayBounds, options)
   }
 
-  showAnchored(workspaceId: string | null, trayBounds: Rectangle): void {
+  showAnchored(workspaceId: string | null, trayBounds: Rectangle, options: { focusOnShow?: boolean } = {}): void {
     this.ensureWindow(workspaceId)
     if (!this.window) return
 
@@ -58,14 +71,14 @@ export class TrayPopoverWindow {
 
     this.anchoredOriginX = clampedX
     this.anchoredOriginY = targetY
-    this.applyMode('anchored')
+    this.applyMode('anchored', { forceNotify: true })
     this.window.setBounds({ x: clampedX, y: targetY, width: POPOVER_WIDTH, height: POPOVER_HEIGHT })
-    this.window.setFocusable(false)
+    this.window.setMovable(true)
+    this.window.setFocusable(options.focusOnShow ?? true)
     this.window.showInactive()
-    setTimeout(() => {
-      if (!this.window || this.window.isDestroyed()) return
-      this.window.setFocusable(true)
-    }, 150)
+    if (options.focusOnShow ?? true) {
+      this.window.focus()
+    }
   }
 
   detach(): void {
@@ -79,10 +92,12 @@ export class TrayPopoverWindow {
   }
 
   closeFromRenderer(): void {
-    this.hide()
     if (this.mode === 'detached') {
+      // Reset while visible so Chromium recalculates the header's native
+      // app-region before the same BrowserWindow is shown from the menubar.
       this.applyMode('anchored')
     }
+    this.hide()
   }
 
   destroy(): void {
@@ -146,47 +161,71 @@ export class TrayPopoverWindow {
     }
     const moveHandler = () => {
       if (!this.window || this.window.isDestroyed()) return
-      if (this.mode !== 'anchored') return
       const bounds = this.window.getBounds()
+      if (this.mode !== 'anchored') return
       const dx = Math.abs(bounds.x - this.anchoredOriginX)
       const dy = Math.abs(bounds.y - this.anchoredOriginY)
       if (dx + dy >= DETACH_THRESHOLD_PX) {
-        this.applyMode('detached')
+        // Do not notify the renderer or mutate NSWindow chrome while macOS is
+        // using the header's app-region as the active drag source.
+        this.detachPending = true
       }
+    }
+    const movedHandler = () => {
+      if (!this.detachPending) return
+      this.detachPending = false
+      setTimeout(() => {
+        if (!this.window || this.window.isDestroyed()) return
+        if (this.mode !== 'anchored') {
+          return
+        }
+        this.applyMode('detached')
+      }, 0)
     }
     this.window.on('blur', blurHandler)
     this.window.on('move', moveHandler)
+    this.window.on('moved', movedHandler)
     this.blurHandler = blurHandler
     this.moveHandler = moveHandler
+    this.movedHandler = movedHandler
   }
 
   private detachListeners(): void {
     if (!this.window || this.window.isDestroyed()) {
       this.blurHandler = null
       this.moveHandler = null
+      this.movedHandler = null
+      this.detachPending = false
       return
     }
     if (this.blurHandler) this.window.removeListener('blur', this.blurHandler)
     if (this.moveHandler) this.window.removeListener('move', this.moveHandler)
+    if (this.movedHandler) this.window.removeListener('moved', this.movedHandler)
     this.blurHandler = null
     this.moveHandler = null
+    this.movedHandler = null
+    this.detachPending = false
   }
 
-  private applyMode(mode: PopoverMode): void {
-    if (mode === this.mode) return
+  private applyMode(mode: PopoverMode, options: { forceNotify?: boolean } = {}): void {
+    if (mode === this.mode && !options.forceNotify) return
     this.mode = mode
     if (!this.window || this.window.isDestroyed()) return
-    this.window.setMovable(true)
 
+    this.applyWindowChrome(mode)
+    this.window.webContents.send('daysTray:mode', mode)
+    this.options.onModeChange?.(mode)
+  }
+
+  private applyWindowChrome(mode: PopoverMode): void {
+    if (!this.window || this.window.isDestroyed()) return
     if (mode === 'detached') {
       this.window.setAlwaysOnTop(this.options.getDetachedAlwaysOnTop(), 'floating')
       this.window.setVisibleOnAllWorkspaces(false)
     } else {
       this.window.setAlwaysOnTop(true, 'pop-up-menu')
     }
-
-    this.window.webContents.send('daysTray:mode', mode)
-    this.options.onModeChange?.(mode)
+    this.window.setMovable(true)
   }
 }
 

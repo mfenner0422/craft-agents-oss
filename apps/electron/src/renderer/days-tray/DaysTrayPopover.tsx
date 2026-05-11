@@ -133,10 +133,47 @@ export function DaysTrayPopover({ initialWorkspaceId }: Props) {
   const carryForwardKey = `${selectedDate}:${carryForward.map(task => task.id).join(',')}`
   const visibleCarryForward = carryForwardDismissedKey === carryForwardKey ? [] : carryForward
 
+  const onHeaderPointerDown = useCallback((event: React.PointerEvent<HTMLElement>) => {
+    if (event.button !== 0) return
+    if ((event.target as HTMLElement).closest('button, input, textarea, select, [role="button"], a')) return
+
+    event.preventDefault()
+    const header = event.currentTarget
+    const pointerId = event.pointerId
+    header.setPointerCapture(pointerId)
+    let lastScreenX = event.screenX
+    let lastScreenY = event.screenY
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      const deltaX = moveEvent.screenX - lastScreenX
+      const deltaY = moveEvent.screenY - lastScreenY
+      lastScreenX = moveEvent.screenX
+      lastScreenY = moveEvent.screenY
+      if (deltaX === 0 && deltaY === 0) return
+      void window.electronAPI.dragDaysTrayPopoverBy?.(deltaX, deltaY)
+    }
+
+    const onPointerUp = () => {
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('pointercancel', onPointerUp)
+      try {
+        header.releasePointerCapture(pointerId)
+      } catch {
+        // The pointer may already be released if the window loses capture.
+      }
+    }
+
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp, { once: true })
+    window.addEventListener('pointercancel', onPointerUp, { once: true })
+  }, [])
+
   return (
     <main className="h-screen w-screen bg-background text-foreground border border-border/60 shadow-strong flex flex-col text-[13px]">
       <header
-        className="h-12 px-3 flex items-center justify-between border-b border-border/60 [-webkit-app-region:drag] cursor-move shrink-0"
+        className="h-12 px-3 flex items-center justify-between border-b border-border/60 [-webkit-app-region:no-drag] cursor-move shrink-0"
+        onPointerDown={onHeaderPointerDown}
         onContextMenu={(event) => {
           event.preventDefault()
           void window.electronAPI.showDaysTrayPopoverMenu?.()

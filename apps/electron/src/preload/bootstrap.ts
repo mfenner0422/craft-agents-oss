@@ -429,6 +429,8 @@ client.onConnectionStateChanged((state) => {
   ipcRenderer.invoke('daysTray:openDays', workspaceId, dateISO)
 ;(api as ElectronAPI).closeDaysTrayPopover = () => ipcRenderer.invoke('daysTray:closePopover')
 ;(api as ElectronAPI).showDaysTrayPopoverMenu = () => ipcRenderer.invoke('daysTray:showPopoverMenu')
+;(api as ElectronAPI).dragDaysTrayPopoverBy = (deltaX: number, deltaY: number) =>
+  ipcRenderer.invoke('daysTray:dragPopoverBy', deltaX, deltaY)
 ;(api as ElectronAPI).onDaysTrayMode = (cb: (mode: 'anchored' | 'detached') => void) => {
   const handler = (_e: any, mode: 'anchored' | 'detached') => cb(mode)
   ipcRenderer.on('daysTray:mode', handler)

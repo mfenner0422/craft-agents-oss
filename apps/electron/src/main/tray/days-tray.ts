@@ -7,6 +7,7 @@ export interface DaysTrayOptions {
   getDetachedAlwaysOnTop: () => boolean
   setDetachedAlwaysOnTop: (enabled: boolean) => void
   openDays: (workspaceId: string | null) => void
+  onPopoverOpenedFromHiddenApp?: () => void
 }
 
 export class DaysTray {
@@ -29,9 +30,15 @@ export class DaysTray {
     this.currentDayOfMonth = new Date().getDate()
 
     this.tray.on('click', () => {
+      const wasAppHidden = app.isHidden()
       const bounds = this.tray?.getBounds()
       if (!bounds) return
-      this.popover.toggleAtTrayBounds(this.options.getActiveWorkspaceId(), bounds)
+      if (wasAppHidden) {
+        this.options.onPopoverOpenedFromHiddenApp?.()
+      }
+      this.popover.toggleAtTrayBounds(this.options.getActiveWorkspaceId(), bounds, {
+        focusOnShow: true,
+      })
     })
     this.tray.on('right-click', () => {
       this.tray?.popUpContextMenu(this.buildContextMenu())
@@ -66,6 +73,10 @@ export class DaysTray {
 
   closePopoverFromRenderer(): void {
     this.popover.closeFromRenderer()
+  }
+
+  dragPopoverBy(senderWebContentsId: number, deltaX: number, deltaY: number): void {
+    this.popover.dragBy(senderWebContentsId, deltaX, deltaY)
   }
 
   showPopoverContextMenu(): void {

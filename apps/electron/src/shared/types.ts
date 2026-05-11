@@ -591,6 +591,7 @@ export interface ElectronAPI {
   openDaysInWorkspace(workspaceId: string, dateISO?: string): Promise<void>
   closeDaysTrayPopover(): Promise<void>
   showDaysTrayPopoverMenu(): Promise<void>
+  dragDaysTrayPopoverBy(deltaX: number, deltaY: number): Promise<void>
   onDaysTrayMode(callback: (mode: 'anchored' | 'detached') => void): () => void
   onDaysTrayNavigate(callback: (dateISO?: string) => void): () => void
 

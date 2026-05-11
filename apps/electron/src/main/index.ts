@@ -195,6 +195,28 @@ let moduleSink: EventSink | null = null
 let moduleClientResolver: ((webContentsId: number) => string | undefined) | null = null
 let daysTray: import('./tray/days-tray').DaysTray | null = null
 let lastFocusedWorkspaceId: string | null = null
+let suppressHiddenAppActivateUntil = 0
+
+function suppressHiddenAppActivateRestore(): void {
+  suppressHiddenAppActivateUntil = Date.now() + 750
+}
+
+function clearHiddenAppActivateSuppression(): void {
+  suppressHiddenAppActivateUntil = 0
+}
+
+function isHiddenAppActivateSuppressed(): boolean {
+  return Date.now() < suppressHiddenAppActivateUntil
+}
+
+function hideManagedWindows(): void {
+  if (!windowManager) return
+  for (const { window } of windowManager.getAllWindows()) {
+    if (!window.isDestroyed()) {
+      window.hide()
+    }
+  }
+}
 
 // Messaging gateway: the bootstrap handle is created once sessionManager is
 // available (inside createHandlerDeps) and populated with the WS publisher
@@ -768,8 +790,15 @@ app.whenReady().then(async () => {
             setDetachedAlwaysOnTop: (enabled) => storage.setDaysTrayDetachedAlwaysOnTop(enabled),
             openDays: (workspaceId) => {
               if (!workspaceId || !windowManager) return
+              clearHiddenAppActivateSuppression()
               const win = windowManager.focusOrCreateWindow(workspaceId)
               win.webContents.send('daysTray:navigateToDays')
+            },
+            onPopoverOpenedFromHiddenApp: () => {
+              suppressHiddenAppActivateRestore()
+              hideManagedWindows()
+              setTimeout(hideManagedWindows, 0)
+              setTimeout(hideManagedWindows, 100)
             },
           })
           daysTray.start()
@@ -779,6 +808,7 @@ app.whenReady().then(async () => {
 
         ipcMain.handle('daysTray:openDays', async (_event, workspaceId: string, dateISO?: string) => {
           if (!workspaceId || !windowManager) return
+          clearHiddenAppActivateSuppression()
           const win = windowManager.focusOrCreateWindow(workspaceId)
           win.webContents.send('daysTray:navigateToDays', dateISO)
           daysTray?.closePopoverFromRenderer()
@@ -788,6 +818,9 @@ app.whenReady().then(async () => {
         })
         ipcMain.handle('daysTray:showPopoverMenu', async () => {
           daysTray?.showPopoverContextMenu()
+        })
+        ipcMain.handle('daysTray:dragPopoverBy', async (event, deltaX: number, deltaY: number) => {
+          daysTray?.dragPopoverBy(event.sender.id, deltaX, deltaY)
         })
 
         // Track focused workspace so tray click respects last-focused window
@@ -1181,6 +1214,10 @@ app.whenReady().then(async () => {
 
   // macOS: Re-create window when dock icon is clicked
   app.on('activate', () => {
+    if (isHiddenAppActivateSuppressed()) {
+      hideManagedWindows()
+      return
+    }
     if (BrowserWindow.getAllWindows().length === 0 && windowManager) {
       // Open first workspace or last focused
       const workspaces = getWorkspaces()
@@ -1192,6 +1229,16 @@ app.whenReady().then(async () => {
           windowManager.createWindow({ workspaceId: wsId })
         } else {
           windowManager.createWindow({ workspaceId: workspaces[0].id })
+        }
+      }
+    } else if (windowManager) {
+      const managedWindows = windowManager.getAllWindows()
+      if (managedWindows.length > 0 && managedWindows.every(({ window }) => !window.isVisible())) {
+        const workspaces = getWorkspaces()
+        const savedState = loadWindowState()
+        const workspaceId = savedState?.lastFocusedWorkspaceId || lastFocusedWorkspaceId || managedWindows[0].workspaceId || workspaces[0]?.id
+        if (workspaceId) {
+          windowManager.focusOrCreateWindow(workspaceId)
         }
       }
     }
