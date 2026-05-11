@@ -139,7 +139,7 @@ export function SendResourceToWorkspaceDialog({
 
       // 2. Import into target workspace
       let importResult
-      if (targetWorkspace.remoteServer) {
+      if (targetWorkspace.remoteServer && targetWorkspace.remoteServer.mode !== 'relay') {
         // Remote target — use invokeOnServer
         const { url, token, remoteWorkspaceId } = targetWorkspace.remoteServer
         importResult = await window.electronAPI.invokeOnServer(

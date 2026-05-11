@@ -256,7 +256,7 @@ export default function App() {
   const windowRemoteWorkspaceId = useMemo(() => {
     if (!windowWorkspaceId) return null
     const workspace = workspaces.find(w => w.id === windowWorkspaceId)
-    return workspace?.remoteServer?.remoteWorkspaceId ?? null
+    return workspace?.remoteServer?.mode === 'relay' ? null : workspace?.remoteServer?.remoteWorkspaceId ?? null
   }, [windowWorkspaceId, workspaces])
 
   // LLM connections with authentication status (for provider selection)

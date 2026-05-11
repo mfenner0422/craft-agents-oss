@@ -7,6 +7,14 @@ export const RPC_CHANNELS = {
   remote: {
     TEST_CONNECTION: 'remote:testConnection',
   },
+  relay: {
+    WRITE: 'relay:write',
+    SNAPSHOT: 'relay:snapshot',
+    EVENT: 'relay:event',
+    ACK: 'relay:ack',
+    SET_META: 'relay:setMeta',
+    DEVICE_PAIRED: 'relay:devicePaired',
+  },
   server: {
     GET_WORKSPACES: 'server:getWorkspaces',
     CREATE_WORKSPACE: 'server:createWorkspace',

@@ -104,6 +104,7 @@ import { getPiModelsForAuthProvider, getAllPiModels } from '@craft-agent/shared/
 import { initNotificationService, initBadgeIcon, initInstanceBadge, updateBadgeCount } from './notifications'
 import { checkForUpdatesOnLaunch, setAutoUpdateEventSink, isUpdating } from './auto-update'
 import type { EventSink } from '@craft-agent/server-core/transport'
+import { createRelayBridgesForWorkspaces, type RelayBridge } from '@craft-agent/server-core/relay'
 import { validateGitBashPath, checkVCRedistInstalled } from '@craft-agent/server-core/services'
 
 // Initialize electron-log for renderer process support
@@ -195,6 +196,10 @@ let moduleSink: EventSink | null = null
 let moduleClientResolver: ((webContentsId: number) => string | undefined) | null = null
 let daysTray: import('./tray/days-tray').DaysTray | null = null
 let lastFocusedWorkspaceId: string | null = null
+const relayBridges: RelayBridge[] = []
+const relayEventSink: EventSink = (channel, target, ...args) => {
+  for (const bridge of relayBridges) bridge.eventSink(channel, target, ...args)
+}
 
 // Messaging gateway: the bootstrap handle is created once sessionManager is
 // available (inside createHandlerDeps) and populated with the WS publisher
@@ -613,6 +618,7 @@ app.whenReady().then(async () => {
         bundledAssetsRoot: __dirname,
         serverId: 'local',
         serverVersion: app.getVersion(),
+        eventSink: relayEventSink,
         platformFactory: () => platform,
         applyPlatformToSubsystems: (p) => {
           setFetcherPlatform(p)
@@ -851,6 +857,13 @@ app.whenReady().then(async () => {
         mainLog.error('[messaging] Gateway initialization failed:', err)
       }
 
+      relayBridges.push(...createRelayBridgesForWorkspaces(
+        getWorkspaces().filter((ws) => ws.remoteServer?.mode === 'relay'),
+        instance.wsServer,
+        mainLog,
+      ))
+      for (const bridge of relayBridges) bridge.start()
+
       // IPC handlers — preload uses sendSync to get WS connection details
 
       // Remove workspace from config (cleanup stale entries)
@@ -892,7 +905,7 @@ app.whenReady().then(async () => {
 
         let bundle: any = null
 
-        if (sourceWorkspace.remoteServer) {
+        if (sourceWorkspace.remoteServer && sourceWorkspace.remoteServer.mode !== 'relay') {
           const { url: sourceUrl, token: sourceToken, remoteWorkspaceId: sourceRemoteWorkspaceId } = sourceWorkspace.remoteServer
           console.log(`[Transfer] Exporting remote-owned session ${sessionId} from workspace ${sourceRemoteWorkspaceId}...`)
           const { client: sourceClient, error: sourceError } = await connectToRemote(sourceUrl, sourceToken, sourceRemoteWorkspaceId)
@@ -936,6 +949,7 @@ app.whenReady().then(async () => {
 
         console.log(`[Transfer] Export complete: ${bundle.session?.messages?.length ?? 0} messages, ${bundle.files?.length ?? 0} files`)
 
+        if (targetWorkspace.remoteServer.mode === 'relay') throw new Error('Relay workspaces are local-owned and cannot be transfer targets')
         const { url, token, remoteWorkspaceId } = targetWorkspace.remoteServer
         console.log(`[Transfer] Connecting to target remote server: ${url}`)
         const { client, error } = await connectToRemote(url, token, remoteWorkspaceId)
@@ -1273,6 +1287,9 @@ app.on('before-quit', async (event) => {
         mainLog.error('[messaging] dispose failed:', err)
       }
     }
+
+    for (const bridge of relayBridges) bridge.stop()
+    relayBridges.length = 0
 
     // Clean up power manager (release power blocker)
     const { cleanup: cleanupPowerManager } = await import('./power-manager')

@@ -8,7 +8,7 @@
 import { describe, it, expect, afterEach } from 'bun:test'
 import WebSocket from 'ws'
 import { WsRpcServer } from '../server'
-import { PROTOCOL_VERSION } from '@craft-agent/shared/protocol'
+import { PROTOCOL_VERSION, type PushTarget } from '@craft-agent/shared/protocol'
 
 const TEST_TOKEN = 'test-token-with-enough-entropy-to-pass'
 
@@ -62,6 +62,31 @@ function handshake(url: string, token: string): Promise<{ ws: WebSocket; clientI
       clearTimeout(timeout)
       reject(err)
     })
+  })
+}
+
+function request(ws: WebSocket, channel: string, args: unknown[] = []): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const id = crypto.randomUUID()
+    const timeout = setTimeout(() => reject(new Error('Request timeout')), 5_000)
+    const onMessage = (data: WebSocket.RawData) => {
+      const msg = JSON.parse(data.toString())
+      if (msg.id !== id) return
+      clearTimeout(timeout)
+      ws.off('message', onMessage)
+      if (msg.error) {
+        reject(new Error(msg.error.message))
+      } else {
+        resolve(msg.result)
+      }
+    }
+    ws.on('message', onMessage)
+    ws.send(JSON.stringify({
+      id,
+      type: 'request',
+      channel,
+      args,
+    }))
   })
 }
 
@@ -193,6 +218,49 @@ describe('WsRpcServer lifecycle', () => {
 
     // Should receive error response (but this will take 60s — skip in normal runs)
     // This test validates the handler is registered; full timeout is covered by the 60s static value
+  })
+
+  it('dispatches handlers through the same path as websocket requests', async () => {
+    server = createServer()
+    server.handle('test:sum', (_ctx, left: number, right: number) => ({
+      total: left + right,
+    }))
+    await server.listen()
+    const url = `ws://127.0.0.1:${server.port}`
+
+    const { ws } = await handshake(url, TEST_TOKEN)
+    openSockets.push(ws)
+
+    const wsResult = await request(ws, 'test:sum', [2, 5])
+    const dispatchResult = await server.dispatch('test:sum', {
+      clientId: 'synthetic-client',
+      workspaceId: null,
+      webContentsId: null,
+    }, [2, 5])
+
+    expect(dispatchResult).toEqual(wsResult)
+  })
+
+  it('notifies eventSink with pushed channel, target, and args', async () => {
+    const observed: Array<{ channel: string; target: PushTarget; args: any[] }> = []
+    server = new WsRpcServer({
+      host: '127.0.0.1',
+      port: 0,
+      requireAuth: true,
+      validateToken: async (t) => t === TEST_TOKEN,
+      serverId: 'test',
+      eventSink: (channel, target, ...args) => {
+        observed.push({ channel, target, args })
+      },
+    })
+    await server.listen()
+
+    const target: PushTarget = { to: 'all' }
+    server.push('test:changed', target, { value: 42 }, 'extra')
+
+    expect(observed).toEqual([
+      { channel: 'test:changed', target, args: [{ value: 42 }, 'extra'] },
+    ])
   })
 
   // -- Protocol version tests --

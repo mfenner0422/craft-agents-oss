@@ -15,6 +15,7 @@ export type HandlerFn = (ctx: RequestContext, ...args: any[]) => Promise<any> | 
 export interface RpcServer {
   handle(channel: string, handler: HandlerFn): void
   push(channel: string, target: PushTarget, ...args: any[]): void
+  dispatch?(channel: string, ctx: RequestContext, args?: any[]): Promise<any>
   invokeClient(clientId: string, channel: string, ...args: any[]): Promise<any>
   updateClientWorkspace?(clientId: string, workspaceId: string): void
 }

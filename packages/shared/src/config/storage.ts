@@ -686,7 +686,7 @@ export function getWorkspaceByNameOrId(nameOrId: string): Workspace | null {
 
 export function updateWorkspaceRemoteServer(
   workspaceId: string,
-  remoteServer: { url: string; token: string; remoteWorkspaceId: string },
+  remoteServer: { mode?: 'direct'; url: string; token: string; remoteWorkspaceId: string } | { mode: 'relay'; url: string; token: string; roomId: string },
 ): void {
   const config = loadStoredConfig();
   if (!config) return;

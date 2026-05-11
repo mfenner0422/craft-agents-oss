@@ -110,13 +110,16 @@ if (isClientOnly) {
 
   // Check if the current workspace is remote (synchronous IPC during preload eval)
   const remoteConfig: RemoteServerConfig | null = ipcRenderer.sendSync('__get-workspace-remote-config')
+  const directRemoteConfig = remoteConfig && remoteConfig.mode !== 'relay'
+    ? remoteConfig
+    : null
 
   let initialWorkspaceClient: WsRpcClient
-  if (remoteConfig && typeof remoteConfig.url === 'string') {
+  if (directRemoteConfig && typeof directRemoteConfig.url === 'string') {
     // Workspace is remote — create a direct connection to the remote server
-    initialWorkspaceClient = new WsRpcClient(remoteConfig.url, {
-      token: remoteConfig.token,
-      workspaceId: remoteConfig.remoteWorkspaceId,
+    initialWorkspaceClient = new WsRpcClient(directRemoteConfig.url, {
+      token: directRemoteConfig.token,
+      workspaceId: directRemoteConfig.remoteWorkspaceId,
       webContentsId,
       autoReconnect: true,
       mode: 'remote',
@@ -132,12 +135,15 @@ if (isClientOnly) {
   const routedClient = new RoutedClient(localClient, initialWorkspaceClient)
 
   // Set workspace ID mapping if initial workspace is remote
-  if (remoteConfig) {
-    routedClient.setWorkspaceMapping(workspaceId, remoteConfig.remoteWorkspaceId)
+  if (directRemoteConfig) {
+    routedClient.setWorkspaceMapping(workspaceId, directRemoteConfig.remoteWorkspaceId)
   }
 
   // Factory for creating remote workspace clients on switch
   routedClient.setClientFactory((remoteServer: RemoteServerConfig) => {
+    if (remoteServer.mode === 'relay') {
+      throw new Error('Relay workspaces are served by the local client')
+    }
     return new WsRpcClient(remoteServer.url, {
       token: remoteServer.token,
       workspaceId: remoteServer.remoteWorkspaceId,

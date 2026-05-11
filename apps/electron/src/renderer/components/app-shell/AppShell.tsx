@@ -1380,7 +1380,7 @@ function AppShellContent({
   // Also exclude hidden sessions (mini-agent sessions) from all counts and lists
   // For remote workspaces, sessions have the remote workspace ID (not the local one),
   // so we match against both the local and remote workspace IDs.
-  const remoteWorkspaceId = activeWorkspace?.remoteServer?.remoteWorkspaceId
+  const remoteWorkspaceId = activeWorkspace?.remoteServer?.mode === 'relay' ? null : activeWorkspace?.remoteServer?.remoteWorkspaceId
   const workspaceSessionMetas = useMemo(() => {
     const metas = Array.from(sessionMetaMap.values())
     if (!activeWorkspaceId) return metas.filter(s => !s.hidden)

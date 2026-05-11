@@ -67,7 +67,7 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
   })
 
   // Update remote server config for an existing workspace (reconnect flow)
-  server.handle(RPC_CHANNELS.workspaces.UPDATE_REMOTE, async (_ctx, workspaceId: string, remoteServer: { url: string; token: string; remoteWorkspaceId: string }) => {
+  server.handle(RPC_CHANNELS.workspaces.UPDATE_REMOTE, async (_ctx, workspaceId: string, remoteServer: { mode?: 'direct'; url: string; token: string; remoteWorkspaceId: string } | { mode: 'relay'; url: string; token: string; roomId: string }) => {
     updateWorkspaceRemoteServer(workspaceId, remoteServer)
     deps.platform.logger.info(`Updated remote server for workspace ${workspaceId}: ${remoteServer.url}`)
     return { success: true }

@@ -35,6 +35,7 @@ export interface ServerBootstrapOptions<TSessionManager, THandlerDeps> {
   cleanupSessionManager?: (sessionManager: TSessionManager) => Promise<void> | void
   cleanupClientResources?: (clientId: string) => void
   onClientConnected?: (info: { clientId: string; webContentsId: number | null; workspaceId: string | null }) => void
+  eventSink?: EventSink
   serverId?: string
   /** App version string, included in handshake_ack for client compatibility checks. */
   serverVersion?: string
@@ -302,6 +303,7 @@ export async function bootstrapServer<TSessionManager, THandlerDeps>(
     onClientDisconnected: (clientId) => {
       options.cleanupClientResources?.(clientId)
     },
+    eventSink: options.eventSink,
   })
 
   await wsServer.listen()

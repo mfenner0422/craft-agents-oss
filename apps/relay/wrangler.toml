@@ -1,0 +1,11 @@
+name = "craft-agent-vault-relay"
+main = "src/worker.ts"
+compatibility_date = "2026-05-09"
+
+[[durable_objects.bindings]]
+name = "VAULT_ROOM"
+class_name = "VaultRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["VaultRoom"]

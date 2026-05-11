@@ -12,11 +12,21 @@ export type McpAuthType = 'workspace_oauth' | 'workspace_bearer' | 'public';
  * Configuration for a remote Craft Agent Server.
  * When set on a workspace, handler calls are proxied over WebSocket.
  */
-export interface RemoteServerConfig {
+export interface DirectRemoteServerConfig {
+  mode?: 'direct';
   url: string;              // ws://host:port or wss://host:port
   token: string;            // Auth token for the remote server
   remoteWorkspaceId: string; // ID of the workspace on the remote server
 }
+
+export interface RelayRemoteServerConfig {
+  mode: 'relay';
+  url: string;              // wss://relay.example/v1/desktop?room=...
+  token: string;            // Desktop token minted by the relay
+  roomId: string;
+}
+
+export type RemoteServerConfig = DirectRemoteServerConfig | RelayRemoteServerConfig;
 
 /**
  * Client-facing workspace DTO — safe to send over RPC to remote clients.
@@ -71,4 +81,3 @@ export interface StoredConfig {
   activeSessionId: string | null;  // Currently active session (primary scope)
   model?: string;
 }
-

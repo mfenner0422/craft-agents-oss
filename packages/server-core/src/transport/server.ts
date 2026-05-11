@@ -22,7 +22,7 @@ import {
   type PushTarget,
   type ErrorCode,
 } from '@craft-agent/shared/protocol'
-import type { RpcServer, HandlerFn, RequestContext } from './types'
+import type { RpcServer, HandlerFn, RequestContext, EventSink } from './types'
 import { serializeEnvelope, deserializeEnvelope } from './codec'
 import { createLogger } from '@craft-agent/shared/utils'
 
@@ -102,6 +102,8 @@ export interface WsRpcServerOptions {
   onClientConnected?: (info: { clientId: string; webContentsId: number | null; workspaceId: string | null }) => void
   /** Called when a client disconnects. */
   onClientDisconnected?: (clientId: string) => void
+  /** Optional observer for outgoing push events. Errors are logged and ignored. */
+  eventSink?: EventSink
   /**
    * Optional HTTP request handler for non-WebSocket requests.
    * When provided, regular HTTP requests to the server's port are
@@ -143,6 +145,7 @@ export class WsRpcServer implements RpcServer {
   private readonly maxClients: number
   private readonly onClientConnected: WsRpcServerOptions['onClientConnected']
   private readonly onClientDisconnected: WsRpcServerOptions['onClientDisconnected']
+  private readonly eventSink: EventSink | null
   private readonly httpHandler: WsRpcServerOptions['httpHandler']
 
   constructor(opts?: WsRpcServerOptions) {
@@ -157,6 +160,7 @@ export class WsRpcServer implements RpcServer {
     this.maxClients = opts?.maxClients ?? 50
     this.onClientConnected = opts?.onClientConnected
     this.onClientDisconnected = opts?.onClientDisconnected
+    this.eventSink = opts?.eventSink ?? null
     this.httpHandler = opts?.httpHandler
   }
 
@@ -198,6 +202,34 @@ export class WsRpcServer implements RpcServer {
       if (!this.matchesTarget(client, target)) continue
       this.bufferAndMaybeSendEvent(client, channel, args, timestamp, false)
     }
+
+    if (this.eventSink) {
+      try {
+        this.eventSink(channel, target, ...args)
+      } catch (error) {
+        transportLog.error('Event sink failed', {
+          channel,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+  }
+
+  async dispatch(channel: string, ctx: RequestContext, args: any[] = []): Promise<any> {
+    const handler = this.handlers.get(channel)
+    if (!handler) {
+      const err = new Error(`No handler for: ${channel}`)
+      ;(err as any).code = 'CHANNEL_NOT_FOUND'
+      throw err
+    }
+
+    return await Promise.race([
+      handler(ctx, ...args),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`Handler timeout: ${channel} (${WsRpcServer.HANDLER_TIMEOUT_MS}ms)`)),
+          WsRpcServer.HANDLER_TIMEOUT_MS),
+      ),
+    ])
   }
 
   invokeClient(clientId: string, channel: string, ...args: any[]): Promise<any> {
@@ -644,13 +676,7 @@ export class WsRpcServer implements RpcServer {
     }
 
     try {
-      const result = await Promise.race([
-        handler(ctx, ...(args ?? [])),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`Handler timeout: ${channel} (${WsRpcServer.HANDLER_TIMEOUT_MS}ms)`)),
-            WsRpcServer.HANDLER_TIMEOUT_MS),
-        ),
-      ])
+      const result = await this.dispatch(channel, ctx, args ?? [])
       const response: MessageEnvelope = {
         id,
         type: 'response',

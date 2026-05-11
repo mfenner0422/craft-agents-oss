@@ -12,6 +12,7 @@
     "./runtime": "./src/runtime/index.ts",
     "./handlers": "./src/handlers/index.ts",
     "./bootstrap": "./src/bootstrap/index.ts",
+    "./relay": "./src/relay/index.ts",
     "./model-fetchers": "./src/model-fetchers/index.ts",
     "./domain": "./src/domain/index.ts",
     "./services": "./src/services/index.ts",

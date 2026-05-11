@@ -36,6 +36,8 @@ import type { WebuiHandler } from '@craft-agent/server-core/webui'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { getWorkspaces } from '@craft-agent/shared/config'
 import { createMessagingBootstrap, type MessagingBootstrapHandle } from '@craft-agent/messaging-gateway'
+import { createRelayBridgesForWorkspaces, type RelayBridge } from '@craft-agent/server-core/relay'
+import type { EventSink } from '@craft-agent/server-core/transport'
 
 // --generate-token: print a crypto-random token and exit
 if (process.argv.includes('--generate-token')) {
@@ -162,6 +164,10 @@ const waNodeBin = process.env.CRAFT_MESSAGING_NODE_BIN ?? 'node'
 // Built inside createHandlerDeps (needs sessionManager), populated with the WS
 // publisher after bootstrapServer resolves.
 let messagingHandle: MessagingBootstrapHandle | null = null
+const relayBridges: RelayBridge[] = []
+const relayEventSink: EventSink = (channel, target, ...args) => {
+  for (const bridge of relayBridges) bridge.eventSink(channel, target, ...args)
+}
 
 const instance = await (async () => {
   try {
@@ -178,6 +184,7 @@ const instance = await (async () => {
         : undefined,
       // Embed the WebUI HTTP handler on the WS server's port
       httpHandler: webuiNodeHandler,
+      eventSink: relayEventSink,
       applyPlatformToSubsystems: (platform) => {
         setFetcherPlatform(platform)
         setSessionPlatform(platform)
@@ -271,6 +278,13 @@ if (messagingHandle !== null) {
   }
 }
 
+relayBridges.push(...createRelayBridgesForWorkspaces(
+  getWorkspaces().filter((ws) => ws.remoteServer?.mode === 'relay'),
+  instance.wsServer,
+  console,
+))
+for (const bridge of relayBridges) bridge.start()
+
 // Wire up the lazy health check now that the session manager is ready
 if (webuiHandler) {
   const { getHealthCheck } = await import('@craft-agent/server-core/handlers/rpc/server')
@@ -337,6 +351,7 @@ if (!isLocalBind && instance.protocol === 'ws') {
 const shutdown = async () => {
   webuiHandler?.dispose()
   healthServer?.stop()
+  for (const bridge of relayBridges) bridge.stop()
   if (messagingHandle) {
     try {
       await messagingHandle.dispose()

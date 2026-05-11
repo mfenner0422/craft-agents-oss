@@ -131,7 +131,7 @@ export function WorkspaceCreationScreen({
             isCreating={isCreating}
             initialUrl={reconnectWorkspace?.remoteServer?.url}
             initialToken={reconnectWorkspace?.remoteServer?.token}
-            reconnectWorkspace={reconnectWorkspace?.remoteServer ? {
+            reconnectWorkspace={reconnectWorkspace?.remoteServer && reconnectWorkspace.remoteServer.mode !== 'relay' ? {
               id: reconnectWorkspace.id,
               name: reconnectWorkspace.name,
               remoteWorkspaceId: reconnectWorkspace.remoteServer.remoteWorkspaceId,

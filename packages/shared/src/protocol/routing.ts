@@ -228,6 +228,14 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
 // ---------------------------------------------------------------------------
 
 export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
+  // relay — endpoint-to-relay protocol, handled by whichever server owns the workspace
+  RPC_CHANNELS.relay.WRITE,
+  RPC_CHANNELS.relay.SNAPSHOT,
+  RPC_CHANNELS.relay.EVENT,
+  RPC_CHANNELS.relay.ACK,
+  RPC_CHANNELS.relay.SET_META,
+  RPC_CHANNELS.relay.DEVICE_PAIRED,
+
   // server — server-level operations (no workspace context needed)
   RPC_CHANNELS.server.GET_WORKSPACES,
   RPC_CHANNELS.server.CREATE_WORKSPACE,
@@ -277,6 +285,12 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
 
   // tasks — workspace content
   RPC_CHANNELS.tasks.GET_OUTPUT,
+  RPC_CHANNELS.tasks.LIST,
+  RPC_CHANNELS.tasks.GET,
+  RPC_CHANNELS.tasks.CREATE,
+  RPC_CHANNELS.tasks.UPDATE,
+  RPC_CHANNELS.tasks.PROMOTE,
+  RPC_CHANNELS.tasks.CHANGED,
 
   // file — workspace files (not openDialog which is native)
   RPC_CHANNELS.file.READ,
@@ -298,6 +312,7 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.capture.SAVE,
   RPC_CHANNELS.capture.LIST,
   RPC_CHANNELS.capture.DELETE,
+  RPC_CHANNELS.capture.PROMOTE,
   RPC_CHANNELS.capture.ENRICH_URL,
   RPC_CHANNELS.capture.SAVED,
 
@@ -310,6 +325,7 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.days.PULL_FORWARD,
   RPC_CHANNELS.days.UPDATE_FILE,
   RPC_CHANNELS.days.UPDATE_TASK_LISTS,
+  RPC_CHANNELS.days.MOVE_TASK,
   RPC_CHANNELS.days.CHANGED,
 
   // llmConnections — LLM config lives on server running workspace

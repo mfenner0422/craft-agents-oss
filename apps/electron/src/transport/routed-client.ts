@@ -185,6 +185,11 @@ export class RoutedClient implements RpcClient {
     if (!result) return
 
     if (result.remoteServer && this.clientFactory) {
+      if (result.remoteServer.mode === 'relay') {
+        this.clearWorkspaceMapping()
+        this.swapWorkspaceClient(this.localClient)
+        return
+      }
       // Remote workspace — set up ID mapping and create + connect new client
       this.setWorkspaceMapping(result.workspaceId, result.remoteServer.remoteWorkspaceId)
       const newClient = this.clientFactory(result.remoteServer)
