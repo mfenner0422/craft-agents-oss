@@ -114,8 +114,11 @@ function handleChangedFile(workspaceId: string, vaultRoot: string, server: RpcSe
 
       parsed.forEach((line, index) => {
         const id = line.id ?? `task_${randomUUID()}`;
-        incomingIds.add(id);
         const current = existingById.get(id) ?? getTask(vaultRoot, id);
+        // A line referencing a soft-deleted task is stale markdown; ignore it
+        // (and don't add to incomingIds, so the next regenerate strips the line).
+        if (current?.dropped_at != null) return;
+        incomingIds.add(id);
         if (current) {
           const patch: Partial<TaskRecord> = {
             title: line.title,

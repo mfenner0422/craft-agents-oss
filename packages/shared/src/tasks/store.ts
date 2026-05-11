@@ -135,7 +135,14 @@ export function writeTask(vaultRoot: string, task: TaskRecord): void {
   const path = getTaskPath(vaultRoot, task.id);
   mkdirSync(dirname(path), { recursive: true });
   const { body, filePath: _filePath, ...data } = task;
-  writeMarkdown(path, data, body);
+  // js-yaml refuses to serialize `undefined`; an updateTask patch that clears
+  // an optional field (e.g. dropping a slotted task) leaves the key with an
+  // undefined value, so strip those before writing.
+  const serializable: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (value !== undefined) serializable[key] = value;
+  }
+  writeMarkdown(path, serializable, body);
 }
 
 export function deleteAllTasks(vaultRoot: string): void {
