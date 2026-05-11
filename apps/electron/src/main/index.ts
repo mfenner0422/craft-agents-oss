@@ -105,6 +105,11 @@ import { initNotificationService, initBadgeIcon, initInstanceBadge, updateBadgeC
 import { checkForUpdatesOnLaunch, setAutoUpdateEventSink, isUpdating } from './auto-update'
 import type { EventSink } from '@craft-agent/server-core/transport'
 import { validateGitBashPath, checkVCRedistInstalled } from '@craft-agent/server-core/services'
+import {
+  hasVisibleUnmanagedWindow,
+  selectWorkspaceForEmptyAppActivation,
+  selectWorkspaceForHiddenWindowActivation,
+} from './window-activation'
 
 // Initialize electron-log for renderer process support
 log.initialize()
@@ -214,6 +219,51 @@ function hideManagedWindows(): void {
   for (const { window } of windowManager.getAllWindows()) {
     if (!window.isDestroyed()) {
       window.hide()
+    }
+  }
+}
+
+function restoreMainWindowOnMacActivation(): void {
+  if (isHiddenAppActivateSuppressed()) {
+    hideManagedWindows()
+    return
+  }
+
+  if (!windowManager) return
+
+  const allWindows = BrowserWindow.getAllWindows().filter(window => !window.isDestroyed())
+  const managedWindows = windowManager.getAllWindows()
+
+  if (allWindows.length === 0) {
+    const workspaces = getWorkspaces()
+    const workspaceIds = workspaces.map(workspace => workspace.id)
+    const savedState = loadWindowState()
+    const workspaceId = selectWorkspaceForEmptyAppActivation({
+      workspaceIds,
+      lastFocusedWorkspaceId,
+      savedLastFocusedWorkspaceId: savedState?.lastFocusedWorkspaceId,
+    })
+
+    if (workspaceId) {
+      windowManager.createWindow({ workspaceId })
+    }
+    return
+  }
+
+  if (
+    managedWindows.length > 0
+    && managedWindows.every(({ window }) => !window.isVisible())
+    && !hasVisibleUnmanagedWindow(allWindows, managedWindows)
+  ) {
+    const workspaces = getWorkspaces()
+    const workspaceId = selectWorkspaceForHiddenWindowActivation({
+      managedWindows,
+      workspaceIds: workspaces.map(workspace => workspace.id),
+      lastFocusedWorkspaceId,
+    })
+
+    if (workspaceId) {
+      windowManager.focusOrCreateWindow(workspaceId)
     }
   }
 }
@@ -695,7 +745,10 @@ app.whenReady().then(async () => {
             browserPaneManager: browserPaneManager ?? undefined,
             oauthFlowStore: ofs,
             messagingRegistry: messagingHandle.registry,
-            onWorkspaceSwitched: (workspaceId: string) => captureManager?.setActiveWorkspaceId(workspaceId),
+            onWorkspaceSwitched: (workspaceId: string) => {
+              lastFocusedWorkspaceId = workspaceId
+              captureManager?.setActiveWorkspaceId(workspaceId)
+            },
           }
         },
         // Headless: register only core handlers (no GUI handlers for browser, settings, etc.)
@@ -1212,37 +1265,9 @@ app.whenReady().then(async () => {
     // Continue anyway - the app will show errors in the UI
   }
 
-  // macOS: Re-create window when dock icon is clicked
-  app.on('activate', () => {
-    if (isHiddenAppActivateSuppressed()) {
-      hideManagedWindows()
-      return
-    }
-    if (BrowserWindow.getAllWindows().length === 0 && windowManager) {
-      // Open first workspace or last focused
-      const workspaces = getWorkspaces()
-      if (workspaces.length > 0) {
-        const savedState = loadWindowState()
-        const wsId = savedState?.lastFocusedWorkspaceId || workspaces[0].id
-        // Verify workspace still exists
-        if (workspaces.some(ws => ws.id === wsId)) {
-          windowManager.createWindow({ workspaceId: wsId })
-        } else {
-          windowManager.createWindow({ workspaceId: workspaces[0].id })
-        }
-      }
-    } else if (windowManager) {
-      const managedWindows = windowManager.getAllWindows()
-      if (managedWindows.length > 0 && managedWindows.every(({ window }) => !window.isVisible())) {
-        const workspaces = getWorkspaces()
-        const savedState = loadWindowState()
-        const workspaceId = savedState?.lastFocusedWorkspaceId || lastFocusedWorkspaceId || managedWindows[0].workspaceId || workspaces[0]?.id
-        if (workspaceId) {
-          windowManager.focusOrCreateWindow(workspaceId)
-        }
-      }
-    }
-  })
+  // macOS: restore the main window when the app is reactivated via Dock or Cmd+Tab.
+  app.on('activate', restoreMainWindowOnMacActivation)
+  app.on('did-become-active', restoreMainWindowOnMacActivation)
 })
 
 app.on('window-all-closed', () => {

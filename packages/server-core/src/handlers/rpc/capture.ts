@@ -18,7 +18,6 @@ export const HANDLED_CHANNELS = [
 export function registerCaptureHandlers(server: RpcServer, _deps: HandlerDeps): void {
   server.handle(RPC_CHANNELS.capture.SAVE, async (_ctx, input: {
     workspaceId: string;
-    source: string;
     url?: string;
     title?: string;
     body: string;
@@ -30,7 +29,7 @@ export function registerCaptureHandlers(server: RpcServer, _deps: HandlerDeps): 
     const workspace = getWorkspaceOrThrow(input.workspaceId);
     const config = loadWorkspaceConfig(workspace.rootPath);
     const vaultRoot = resolveVaultRoot(workspace.rootPath, config);
-    const item = captureItem({ vaultRoot, source: input.source, url: input.url, title: input.title, body: input.body, tags: input.tags, skipEnrichment: true });
+    const item = captureItem({ vaultRoot, url: input.url, title: input.title, body: input.body, tags: input.tags, skipEnrichment: true });
     const directTarget: TaskListKind | null = input.tags?.includes('next') ? 'next' : (input.tags?.includes('someday') ? 'someday' : null);
     let createdTaskId: string | null = null;
     if (directTarget) {
@@ -53,7 +52,7 @@ export function registerCaptureHandlers(server: RpcServer, _deps: HandlerDeps): 
 
     if (item.url) {
       void enrichUrl(item.url).then(meta => {
-        if (!meta.title && !meta.description && !meta.contentMarkdown) return;
+        if (!meta.title && !meta.description && !meta.contentMarkdown && !meta.faviconUrl) return;
         const userNote = input.body?.trim();
         const isUserNote = userNote && userNote !== input.url?.trim() && userNote !== input.title?.trim();
         const parts: string[] = [];
@@ -63,14 +62,15 @@ export function registerCaptureHandlers(server: RpcServer, _deps: HandlerDeps): 
         const enrichedItem = {
           ...item,
           title: item.title ?? meta.title,
+          faviconUrl: item.faviconUrl ?? meta.faviconUrl,
           body: enrichedBody,
         };
         writeMarkdown(item.filePath, {
           id: item.id,
           captured_at: item.capturedAt,
-          source: item.source,
           url: item.url,
-          title: enrichedItem.title,
+          ...(enrichedItem.title ? { title: enrichedItem.title } : {}),
+          ...(enrichedItem.faviconUrl ? { favicon_url: enrichedItem.faviconUrl } : {}),
           ...(meta.description ? { description: meta.description } : {}),
           ...(meta.author ? { author: meta.author } : {}),
           ...(meta.site ? { site: meta.site } : {}),

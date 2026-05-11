@@ -5,9 +5,9 @@ import { readMarkdown, writeMarkdown } from '../vault/markdown.ts';
 
 export interface CaptureItemInput {
   vaultRoot: string;
-  source: string;
   url?: string;
   title?: string;
+  faviconUrl?: string;
   body: string;
   tags?: string[];
   now?: Date;
@@ -18,9 +18,9 @@ export interface CaptureItem {
   id: string;
   filePath: string;
   capturedAt: string;
-  source: string;
   url?: string;
   title?: string;
+  faviconUrl?: string;
   tags: string[];
   triagedAt?: string;
   body: string;
@@ -32,6 +32,7 @@ export function captureItem(input: CaptureItemInput): CaptureItem {
   const capturedAt = now.toISOString();
   const title = input.title?.trim() || undefined;
   const url = input.url?.trim() || undefined;
+  const faviconUrl = input.faviconUrl?.trim() || undefined;
   const slugSource = title || (url ? safeHostname(url) : input.body.slice(0, 48));
   const filename = `${formatTimestamp(now)}-${slugify(slugSource || 'capture')}.md`;
   const inboxDir = join(input.vaultRoot, 'inbox');
@@ -42,21 +43,21 @@ export function captureItem(input: CaptureItemInput): CaptureItem {
   writeMarkdown(filePath, {
     id,
     captured_at: capturedAt,
-    source: input.source,
     ...(url ? { url } : {}),
     ...(title ? { title } : {}),
+    ...(faviconUrl ? { favicon_url: faviconUrl } : {}),
     tags,
   }, input.body);
 
   if (url && !input.skipEnrichment) {
     void enrichUrl(url).then(meta => {
-      if (!meta.title && !meta.description) return;
+      if (!meta.title && !meta.description && !meta.faviconUrl) return;
       writeMarkdown(filePath, {
         id,
         captured_at: capturedAt,
-        source: input.source,
         url,
-        title: title ?? meta.title,
+        ...((title ?? meta.title) ? { title: title ?? meta.title } : {}),
+        ...((faviconUrl ?? meta.faviconUrl) ? { favicon_url: faviconUrl ?? meta.faviconUrl } : {}),
         ...(meta.description ? { description: meta.description } : {}),
         tags,
       }, input.body);
@@ -69,9 +70,9 @@ export function captureItem(input: CaptureItemInput): CaptureItem {
     id,
     filePath,
     capturedAt,
-    source: input.source,
     ...(url ? { url } : {}),
     ...(title ? { title } : {}),
+    ...(faviconUrl ? { faviconUrl } : {}),
     tags,
     body: input.body,
   };
@@ -93,9 +94,9 @@ export function listInboxItems(vaultRoot: string, limitOrOptions: number | { lim
         id: String(doc.data.id ?? name.replace(/\.md$/, '')),
         filePath,
         capturedAt: String(doc.data.captured_at ?? ''),
-        source: String(doc.data.source ?? 'manual'),
         ...(typeof doc.data.url === 'string' ? { url: doc.data.url } : {}),
         ...(typeof doc.data.title === 'string' ? { title: doc.data.title } : {}),
+        ...(typeof doc.data.favicon_url === 'string' ? { faviconUrl: doc.data.favicon_url } : {}),
         tags: Array.isArray(doc.data.tags) ? doc.data.tags.map(String) : [],
         ...(typeof doc.data.triaged_at === 'string' ? { triagedAt: doc.data.triaged_at } : {}),
         body: doc.content,
@@ -155,9 +156,9 @@ function readCaptureItem(vaultRoot: string, itemId: string): CaptureItem | null 
       id,
       filePath,
       capturedAt: String(doc.data.captured_at ?? ''),
-      source: String(doc.data.source ?? 'manual'),
       ...(typeof doc.data.url === 'string' ? { url: doc.data.url } : {}),
       ...(typeof doc.data.title === 'string' ? { title: doc.data.title } : {}),
+      ...(typeof doc.data.favicon_url === 'string' ? { faviconUrl: doc.data.favicon_url } : {}),
       tags: Array.isArray(doc.data.tags) ? doc.data.tags.map(String) : [],
       ...(typeof doc.data.triaged_at === 'string' ? { triagedAt: doc.data.triaged_at } : {}),
       body: doc.content,
@@ -171,6 +172,7 @@ export interface EnrichResult {
   description?: string;
   author?: string;
   site?: string;
+  faviconUrl?: string;
   contentMarkdown?: string;
   wordCount?: number;
   published?: string;
@@ -192,6 +194,7 @@ export async function enrichUrl(url: string): Promise<EnrichResult> {
     const contentType = response.headers.get('content-type') ?? '';
     if (!contentType.toLowerCase().includes('text/html')) return {};
     const html = await response.text();
+    const faviconUrl = extractFaviconUrl(html, parsed);
 
     const { Defuddle } = await import('defuddle/node');
     const result = await Defuddle(html, parsed.toString(), { markdown: true });
@@ -201,6 +204,7 @@ export async function enrichUrl(url: string): Promise<EnrichResult> {
       description: result.description || undefined,
       author: result.author || undefined,
       site: result.site || undefined,
+      faviconUrl,
       contentMarkdown: result.content || undefined,
       wordCount: result.wordCount || undefined,
       published: result.published || undefined,
@@ -208,6 +212,32 @@ export async function enrichUrl(url: string): Promise<EnrichResult> {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function extractFaviconUrl(html: string, pageUrl: URL): string | undefined {
+  const linkPattern = /<link\b[^>]*>/gi;
+  for (const match of html.matchAll(linkPattern)) {
+    const tag = match[0] ?? '';
+    const rel = getHtmlAttribute(tag, 'rel')?.toLowerCase();
+    if (!rel?.split(/\s+/).some(value => value === 'icon' || value === 'shortcut icon' || value === 'apple-touch-icon')) {
+      continue;
+    }
+    const href = getHtmlAttribute(tag, 'href');
+    if (!href) continue;
+    try {
+      return new URL(href, pageUrl).toString();
+    } catch {
+      continue;
+    }
+  }
+  return undefined;
+}
+
+function getHtmlAttribute(tag: string, name: string): string | undefined {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`\\s${escaped}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'=<>` + '`' + `]+))`, 'i');
+  const match = tag.match(pattern);
+  return match?.[1] ?? match?.[2] ?? match?.[3] ?? undefined;
 }
 
 function safeHostname(url: string): string {

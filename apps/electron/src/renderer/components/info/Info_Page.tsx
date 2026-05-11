@@ -31,7 +31,7 @@ export interface Info_PageHeaderProps extends Omit<PanelHeaderProps, 'className'
 
 export interface Info_PageHeroProps {
   /** Avatar element */
-  avatar: React.ReactNode
+  avatar?: React.ReactNode
   /** Title displayed next to avatar */
   title?: string
   /** Tagline/description text below title */
@@ -118,9 +118,11 @@ function Info_PageHeader({ className, ...props }: Info_PageHeaderProps) {
 function Info_PageHero({ avatar, title, tagline, className }: Info_PageHeroProps) {
   return (
     <div className={cn('flex items-start gap-3', className)}>
-      <div className="h-[32px] w-[32px] shrink-0 mt-[2px] rounded-[4px] ring-1 ring-border/30 overflow-hidden">
-        {avatar}
-      </div>
+      {avatar && (
+        <div className="h-[32px] w-[32px] shrink-0 mt-[2px] rounded-[4px] ring-1 ring-border/30 overflow-hidden">
+          {avatar}
+        </div>
+      )}
       <div className="flex-1 min-w-0">
         {title && (
           <h2 className="text-base font-semibold text-foreground leading-tight">

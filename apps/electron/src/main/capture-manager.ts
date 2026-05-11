@@ -1,6 +1,7 @@
 import { app, BrowserWindow, globalShortcut } from 'electron'
 import type { Workspace } from '@craft-agent/shared/config/storage'
 import { loadWorkspaceConfig } from '@craft-agent/shared/workspaces'
+import { expandPath } from '@craft-agent/shared/utils'
 import { mainLog } from './logger'
 import { getFrontmostBrowserContext, type AutofillContext } from './app-context'
 
@@ -207,6 +208,6 @@ export class CaptureManager {
   private isCaptureEnabled(workspaceId: string): boolean {
     const workspace = this.getWorkspaces().find(item => item.id === workspaceId)
     if (!workspace?.rootPath) return false
-    return loadWorkspaceConfig(workspace.rootPath)?.capture?.enabled === true
+    return loadWorkspaceConfig(expandPath(workspace.rootPath))?.capture?.enabled === true
   }
 }

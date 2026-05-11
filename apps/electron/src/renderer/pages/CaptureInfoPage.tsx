@@ -1,7 +1,6 @@
 import * as React from 'react'
 import { useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Inbox } from 'lucide-react'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
 import {
@@ -62,6 +61,16 @@ export default function CaptureInfoPage({ item, workspaceId }: CaptureInfoPagePr
     return format(parsed, 'PPpp', { locale: getDateLocale(i18n.resolvedLanguage ?? 'en') })
   }, [item?.capturedAt, i18n.resolvedLanguage])
 
+  const faviconCandidates = React.useMemo(() => {
+    return uniqueValues([item?.faviconUrl, getRootFaviconUrl(item?.url)])
+  }, [item?.faviconUrl, item?.url])
+  const [faviconIndex, setFaviconIndex] = React.useState(0)
+  const faviconUrl = faviconCandidates[faviconIndex]
+
+  React.useEffect(() => {
+    setFaviconIndex(0)
+  }, [faviconCandidates])
+
   return (
     <Info_Page empty={!item ? t('captureInfo.selectACapture') : undefined}>
       <Info_Page.Header
@@ -81,18 +90,20 @@ export default function CaptureInfoPage({ item, workspaceId }: CaptureInfoPagePr
       {item && (
         <Info_Page.Content>
           <Info_Page.Hero
-            avatar={
-              <div className="h-full w-full flex items-center justify-center bg-foreground/5 text-muted-foreground">
-                <Inbox className="h-4 w-4" />
-              </div>
-            }
+            avatar={faviconUrl ? (
+              <img
+                src={faviconUrl}
+                alt=""
+                className="h-full w-full object-cover bg-background"
+                onError={() => setFaviconIndex(index => index + 1)}
+              />
+            ) : undefined}
             title={title}
             tagline={item.url ?? formattedDate}
           />
 
           <Info_Section title={t('captureInfo.metadata')}>
             <Info_Table>
-              <Info_Table.Row label={t('common.source')} value={item.source} />
               <Info_Table.Row label={t('captureInfo.capturedAt')} value={formattedDate} />
               {item.url && (
                 <Info_Table.Row label={t('common.url')}>
@@ -131,4 +142,19 @@ export default function CaptureInfoPage({ item, workspaceId }: CaptureInfoPagePr
       )}
     </Info_Page>
   )
+}
+
+function uniqueValues(values: Array<string | undefined>): string[] {
+  return Array.from(new Set(values.filter((value): value is string => !!value)))
+}
+
+function getRootFaviconUrl(url?: string): string | undefined {
+  if (!url) return undefined
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return undefined
+    return new URL('/favicon.ico', parsed.origin).toString()
+  } catch {
+    return undefined
+  }
 }

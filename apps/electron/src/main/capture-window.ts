@@ -1,4 +1,4 @@
-import { BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'node:path'
 
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
@@ -10,23 +10,29 @@ export interface CapturePrefill {
 }
 
 let captureWindow: BrowserWindow | null = null
+let openedFromAppWindow = false
 
 export function openCaptureWindow(workspaceId: string, prefill?: CapturePrefill): void {
   if (captureWindow && !captureWindow.isDestroyed()) {
+    if (!prefill) {
+      captureWindow.close()
+      return
+    }
     captureWindow.loadURL(buildCaptureUrl(workspaceId, prefill))
-    captureWindow.show()
-    captureWindow.focus()
+    showCaptureWindow()
     return
   }
 
+  openedFromAppWindow = BrowserWindow.getFocusedWindow() !== null
   captureWindow = new BrowserWindow({
     width: 480,
-    height: 320,
+    height: 268,
     minWidth: 420,
-    minHeight: 280,
+    minHeight: 268,
     title: 'Capture',
     show: false,
     frame: false,
+    useContentSize: true,
     resizable: true,
     alwaysOnTop: true,
     webPreferences: {
@@ -38,17 +44,38 @@ export function openCaptureWindow(workspaceId: string, prefill?: CapturePrefill)
   })
 
   captureWindow.once('ready-to-show', () => {
-    captureWindow?.show()
-    captureWindow?.focus()
+    showCaptureWindow()
   })
   captureWindow.on('closed', () => {
     captureWindow = null
+    if (process.platform === 'darwin' && !openedFromAppWindow) {
+      app.hide()
+    }
+    openedFromAppWindow = false
   })
   captureWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }
   })
   void captureWindow.loadURL(buildCaptureUrl(workspaceId, prefill))
+}
+
+function showCaptureWindow(): void {
+  if (!captureWindow || captureWindow.isDestroyed()) return
+
+  captureWindow.show()
+  keepMainWindowsHiddenIfNeeded()
+  captureWindow.focus()
+  captureWindow.webContents.focus()
+}
+
+function keepMainWindowsHiddenIfNeeded(): void {
+  if (openedFromAppWindow) return
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (window !== captureWindow && !window.isDestroyed()) {
+      window.hide()
+    }
+  }
 }
 
 function buildCaptureUrl(workspaceId: string, prefill?: CapturePrefill): string {

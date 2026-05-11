@@ -132,9 +132,6 @@ export function CaptureListPanel({
         title: item.title || item.url || 'Untitled capture',
         badges: (
           <span className="flex items-center gap-1.5 min-w-0">
-            <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-foreground/5 text-muted-foreground">
-              {item.source}
-            </span>
             {item.tags.slice(0, 2).map((tag) => (
               <span
                 key={tag}

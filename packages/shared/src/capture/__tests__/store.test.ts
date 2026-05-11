@@ -23,7 +23,6 @@ describe('capture store', () => {
     const vaultRoot = tempVault();
     const item = captureItem({
       vaultRoot,
-      source: 'manual',
       title: 'Read Later',
       body: 'Interesting note',
       tags: ['inbox'],
@@ -38,6 +37,7 @@ describe('capture store', () => {
       title: 'Read Later',
       tags: ['inbox'],
     }));
+    expect(items[0]).not.toHaveProperty('source');
     expect(items[0]?.body.trim()).toBe('Interesting note');
   });
 
@@ -45,7 +45,6 @@ describe('capture store', () => {
     const vaultRoot = tempVault();
     const item = captureItem({
       vaultRoot,
-      source: 'manual',
       title: 'Throwaway',
       body: 'goodbye',
       now: new Date('2026-05-06T10:11:12.000Z'),
@@ -61,7 +60,6 @@ describe('capture store', () => {
     const vaultRoot = tempVault();
     captureItem({
       vaultRoot,
-      source: 'manual',
       title: 'Real one',
       body: 'still here',
       now: new Date('2026-05-06T10:11:12.000Z'),
@@ -74,7 +72,6 @@ describe('capture store', () => {
     const vaultRoot = tempVault();
     const item = captureItem({
       vaultRoot,
-      source: 'url',
       url: 'https://example.com/path',
       body: 'https://example.com/path',
       now: new Date('2026-05-06T10:11:12.000Z'),

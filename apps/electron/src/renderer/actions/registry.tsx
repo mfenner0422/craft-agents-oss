@@ -79,6 +79,8 @@ export function ActionRegistryProvider({ children }: { children: React.ReactNode
   // Set up global hotkey listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (document.body.dataset.hotkeyRecording === 'true') return
+
       // Build context snapshot from DOM state at event time
       const context = getKeybindingContext(e)
 

@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactDOM from 'react-dom/client'
-import { Inbox, Calendar, Layers, X } from 'lucide-react'
+import { Inbox, Calendar, X } from 'lucide-react'
+import { todayDateISO } from '@craft-agent/shared/days/date'
 import '../index.css'
 
-type CaptureTarget = 'inbox' | 'next' | 'someday'
+type CaptureTarget = 'today' | 'inbox'
 
 function getWorkspaceId(): string {
   return new URLSearchParams(window.location.search).get('workspaceId') ?? ''
@@ -26,14 +27,21 @@ function CaptureWindow() {
   const [body, setBody] = useState(prefill.body)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const urlInputRef = useRef<HTMLInputElement>(null)
-  const bodyTextareaRef = useRef<HTMLTextAreaElement>(null)
-  const hasPrefill = !!(prefill.url || prefill.title)
+  const titleInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (hasPrefill) bodyTextareaRef.current?.focus()
-    else urlInputRef.current?.focus()
-  }, [hasPrefill])
+    const focusTitle = () => {
+      titleInputRef.current?.focus()
+      titleInputRef.current?.select()
+    }
+    focusTitle()
+    const frame = window.requestAnimationFrame(focusTitle)
+    const timeout = window.setTimeout(focusTitle, 50)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      window.clearTimeout(timeout)
+    }
+  }, [])
 
   const hasContent = !!(url.trim() || title.trim() || body.trim())
 
@@ -42,15 +50,23 @@ function CaptureWindow() {
     setSaving(true)
     setError(null)
     try {
-      const tags: string[] = target === 'inbox' ? [] : [target, 'triaged']
-      await window.electronAPI.saveCapture({
-        workspaceId,
-        source: 'global-hotkey',
-        url: url.trim() || undefined,
-        title: title.trim() || undefined,
-        body: body.trim(),
-        tags,
-      })
+      if (target === 'today') {
+        await window.electronAPI.createTask(workspaceId, {
+          title: deriveTaskTitle({ title, body, url }),
+          day: todayDateISO(),
+          list: null,
+          source: 'capture',
+          body: buildTaskBody({ body, url }),
+        })
+      } else {
+        await window.electronAPI.saveCapture({
+          workspaceId,
+          url: url.trim() || undefined,
+          title: title.trim() || undefined,
+          body: body.trim(),
+          tags: [],
+        })
+      }
       window.close()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save capture')
@@ -59,9 +75,28 @@ function CaptureWindow() {
     }
   }, [body, hasContent, saving, title, url, workspaceId])
 
+  const handleKeyDown = useCallback((event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      window.close()
+      return
+    }
+    if (event.key !== 'Enter') return
+    if (event.altKey && !event.metaKey) {
+      event.preventDefault()
+      void save('today')
+    } else if (event.metaKey && !event.altKey) {
+      event.preventDefault()
+      void save('inbox')
+    }
+  }, [save])
+
   return (
-    <main className="h-screen w-screen bg-background text-foreground border border-border/60 shadow-strong">
-      <header className="h-10 px-3 flex items-center justify-between border-b border-border/60 [-webkit-app-region:drag]">
+    <main
+      className="h-screen w-screen bg-background text-foreground border border-border/60 shadow-strong"
+      onKeyDown={handleKeyDown}
+    >
+      <header className="h-9 px-3 flex items-center justify-between border-b border-border/60 [-webkit-app-region:drag]">
         <div className="text-[13px] font-medium">Capture</div>
         <button
           type="button"
@@ -72,23 +107,23 @@ function CaptureWindow() {
           <X className="h-4 w-4" />
         </button>
       </header>
-      <section className="p-3 flex flex-col gap-2">
+      <section className="p-2.5 flex flex-col gap-1.5">
         <input
-          ref={urlInputRef}
-          className="h-9 rounded-md border border-border bg-background px-2 text-[13px] outline-none focus:ring-1 focus:ring-ring"
-          value={url}
-          onChange={(event) => setUrl(event.target.value)}
-          placeholder="URL"
-        />
-        <input
+          ref={titleInputRef}
+          autoFocus
           className="h-9 rounded-md border border-border bg-background px-2 text-[13px] outline-none focus:ring-1 focus:ring-ring"
           value={title}
           onChange={(event) => setTitle(event.target.value)}
           placeholder="Title"
         />
+        <input
+          className="h-9 rounded-md border border-border bg-background px-2 text-[13px] outline-none focus:ring-1 focus:ring-ring"
+          value={url}
+          onChange={(event) => setUrl(event.target.value)}
+          placeholder="URL"
+        />
         <textarea
-          ref={bodyTextareaRef}
-          className="min-h-[118px] resize-none rounded-md border border-border bg-background p-2 text-[13px] outline-none focus:ring-1 focus:ring-ring"
+          className="h-[88px] resize-none rounded-md border border-border bg-background p-2 text-[13px] outline-none focus:ring-1 focus:ring-ring"
           value={body}
           onChange={(event) => setBody(event.target.value)}
           placeholder="Note"
@@ -96,25 +131,20 @@ function CaptureWindow() {
         {error && <div className="text-[12px] text-destructive">{error}</div>}
         <div className="flex items-center justify-end gap-1.5">
           <SaveButton
+            label="Today"
+            shortcut="⌥ Enter"
+            icon={<Calendar className="h-3.5 w-3.5" />}
+            onClick={() => save('today')}
+            disabled={saving || !hasContent}
+            variant="primary"
+          />
+          <SaveButton
             label="Inbox"
+            shortcut="⌘ Enter"
             icon={<Inbox className="h-3.5 w-3.5" />}
             onClick={() => save('inbox')}
             disabled={saving || !hasContent}
             variant="secondary"
-          />
-          <SaveButton
-            label="Someday"
-            icon={<Layers className="h-3.5 w-3.5" />}
-            onClick={() => save('someday')}
-            disabled={saving || !hasContent}
-            variant="secondary"
-          />
-          <SaveButton
-            label="Next"
-            icon={<Calendar className="h-3.5 w-3.5" />}
-            onClick={() => save('next')}
-            disabled={saving || !hasContent}
-            variant="primary"
           />
         </div>
       </section>
@@ -122,14 +152,40 @@ function CaptureWindow() {
   )
 }
 
+function deriveTaskTitle({ title, body, url }: { title: string; body: string; url: string }): string {
+  const explicitTitle = title.trim()
+  if (explicitTitle) return explicitTitle
+
+  for (const line of body.split(/\r?\n/)) {
+    const cleaned = line.replace(/^\s*#+\s*/, '').trim()
+    if (cleaned) return cleaned
+  }
+
+  if (url.trim()) {
+    try {
+      return new URL(url.trim()).hostname.replace(/^www\./, '')
+    } catch {
+      return url.trim()
+    }
+  }
+
+  return 'Capture'
+}
+
+function buildTaskBody({ body, url }: { body: string; url: string }): string {
+  return [body.trim(), url.trim()].filter(Boolean).join('\n\n')
+}
+
 function SaveButton({
   label,
+  shortcut,
   icon,
   onClick,
   disabled,
   variant,
 }: {
   label: string
+  shortcut: string
   icon: React.ReactNode
   onClick: () => void
   disabled: boolean
@@ -147,6 +203,7 @@ function SaveButton({
     >
       {icon}
       {label}
+      <span className="text-[11px] opacity-70">{shortcut}</span>
     </button>
   )
 }

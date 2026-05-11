@@ -436,7 +436,7 @@ export interface ElectronAPI {
   setCaptureAutofillHotkey(accelerator: string): Promise<{ ok: boolean; error?: string }>
   onCaptureAutofillHotkeyChanged(callback: (accelerator: string) => void): () => void
   onCaptureAutofillHotkeyConflict(callback: (payload: { accelerator: string; error: string }) => void): () => void
-  saveCapture(input: { workspaceId: string; source: string; url?: string; title?: string; body: string; tags?: string[] }): Promise<import('@craft-agent/shared/capture').CaptureItem>
+  saveCapture(input: { workspaceId: string; url?: string; title?: string; body: string; tags?: string[] }): Promise<import('@craft-agent/shared/capture').CaptureItem>
   listCaptureInbox(workspaceId: string, limit?: number): Promise<import('@craft-agent/shared/capture').CaptureItem[]>
   deleteCapture(workspaceId: string, itemId: string): Promise<void>
   promoteCapture(workspaceId: string, itemId: string, target: { kind: 'day'; dateISO: string; slot?: number } | { kind: 'next' } | { kind: 'someday' } | { kind: 'drop' }): Promise<import('@craft-agent/shared/tasks').TaskRecord>

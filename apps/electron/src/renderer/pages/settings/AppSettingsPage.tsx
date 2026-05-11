@@ -20,11 +20,8 @@ import { Button } from '@/components/ui/button'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { routes } from '@/lib/navigate'
 import { Spinner } from '@craft-agent/ui'
-const DEFAULT_CAPTURE_HOTKEY = 'CommandOrControl+Alt+Space'
-const DEFAULT_CAPTURE_AUTOFILL_HOTKEY = 'CommandOrControl+Alt+Shift+Space'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { NetworkProxySettings } from '../../../shared/types'
-import { toast } from 'sonner'
 
 import {
   SettingsSection,
@@ -106,8 +103,6 @@ export default function AppSettingsPage() {
 
   // Tools state
   const [browserToolEnabled, setBrowserToolEnabled] = useState(true)
-  const [captureHotkey, setCaptureHotkey] = useState('')
-  const [captureAutofillHotkey, setCaptureAutofillHotkey] = useState('')
 
   // Proxy state
   const [proxyForm, setProxyForm] = useState<ProxyFormState>(EMPTY_PROXY_FORM)
@@ -133,19 +128,15 @@ export default function AppSettingsPage() {
   const loadSettings = useCallback(async () => {
     if (!window.electronAPI) return
     try {
-      const [notificationsOn, keepAwakeOn, browserToolOn, proxySettings, captureAccelerator, captureAutofillAccelerator] = await Promise.all([
+      const [notificationsOn, keepAwakeOn, browserToolOn, proxySettings] = await Promise.all([
         window.electronAPI.getNotificationsEnabled(),
         window.electronAPI.getKeepAwakeWhileRunning(),
         window.electronAPI.getBrowserToolEnabled(),
         window.electronAPI.getNetworkProxySettings(),
-        window.electronAPI.getCaptureHotkey(),
-        window.electronAPI.getCaptureAutofillHotkey(),
       ])
       setNotificationsEnabled(notificationsOn)
       setKeepAwakeEnabled(keepAwakeOn)
       setBrowserToolEnabled(browserToolOn)
-      setCaptureHotkey(captureAccelerator)
-      setCaptureAutofillHotkey(captureAutofillAccelerator)
       const form = toProxyFormState(proxySettings)
       setProxyForm(form)
       setSavedProxyForm(form)
@@ -156,28 +147,7 @@ export default function AppSettingsPage() {
 
   useEffect(() => {
     loadSettings()
-  }, [])
-
-  useEffect(() => {
-    const cleanupChanged = window.electronAPI.onCaptureHotkeyChanged?.((accelerator) => {
-      setCaptureHotkey(accelerator)
-    })
-    const cleanupConflict = window.electronAPI.onCaptureHotkeyConflict?.(() => {
-      toast.error(t('settings.capture.hotkeyConflict'))
-    })
-    const cleanupAutofillChanged = window.electronAPI.onCaptureAutofillHotkeyChanged?.((accelerator) => {
-      setCaptureAutofillHotkey(accelerator)
-    })
-    const cleanupAutofillConflict = window.electronAPI.onCaptureAutofillHotkeyConflict?.(() => {
-      toast.error(t('settings.capture.autofillHotkeyConflict'))
-    })
-    return () => {
-      cleanupChanged?.()
-      cleanupConflict?.()
-      cleanupAutofillChanged?.()
-      cleanupAutofillConflict?.()
-    }
-  }, [t])
+  }, [loadSettings])
 
   const handleNotificationsEnabledChange = useCallback(async (enabled: boolean) => {
     setNotificationsEnabled(enabled)
@@ -193,30 +163,6 @@ export default function AppSettingsPage() {
     setBrowserToolEnabled(enabled)
     await window.electronAPI.setBrowserToolEnabled(enabled)
   }, [])
-
-  const handleCaptureHotkeyChange = useCallback(async (value: string) => {
-    setCaptureHotkey(value)
-  }, [])
-
-  const handleCaptureHotkeyBlur = useCallback(async () => {
-    const result = await window.electronAPI.setCaptureHotkey(captureHotkey)
-    if (!result.ok) {
-      toast.error(t('settings.capture.hotkeyFailed'), { description: result.error })
-      setCaptureHotkey(await window.electronAPI.getCaptureHotkey())
-    }
-  }, [captureHotkey, t])
-
-  const handleCaptureAutofillHotkeyChange = useCallback(async (value: string) => {
-    setCaptureAutofillHotkey(value)
-  }, [])
-
-  const handleCaptureAutofillHotkeyBlur = useCallback(async () => {
-    const result = await window.electronAPI.setCaptureAutofillHotkey(captureAutofillHotkey)
-    if (!result.ok) {
-      toast.error(t('settings.capture.autofillHotkeyFailed'), { description: result.error })
-      setCaptureAutofillHotkey(await window.electronAPI.getCaptureAutofillHotkey())
-    }
-  }, [captureAutofillHotkey, t])
 
   // Proxy handlers
   const isProxyDirty = useMemo(() => {
@@ -292,21 +238,6 @@ export default function AppSettingsPage() {
                     description={t("settings.tools.builtInBrowserDesc")}
                     checked={browserToolEnabled}
                     onCheckedChange={handleBrowserToolEnabledChange}
-                  />
-                  <SettingsInput
-                    label={t("settings.capture.hotkey")}
-                    value={captureHotkey}
-                    onChange={handleCaptureHotkeyChange}
-                    onBlur={handleCaptureHotkeyBlur}
-                    placeholder={DEFAULT_CAPTURE_HOTKEY}
-                  />
-                  <SettingsInput
-                    label={t("settings.capture.autofillHotkey")}
-                    description={t("settings.capture.autofillHotkeyDesc")}
-                    value={captureAutofillHotkey}
-                    onChange={handleCaptureAutofillHotkeyChange}
-                    onBlur={handleCaptureAutofillHotkeyBlur}
-                    placeholder={DEFAULT_CAPTURE_AUTOFILL_HOTKEY}
                   />
                 </SettingsCard>
               </SettingsSection>
