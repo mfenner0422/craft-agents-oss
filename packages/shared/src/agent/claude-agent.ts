@@ -81,7 +81,22 @@ import type {
   SourceActivationCallback,
 } from './backend/types.ts';
 import { stat } from 'node:fs/promises';
+import { mkdirSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import { IMAGE_LIMITS } from '../utils/files.ts';
+
+/**
+ * Isolate the Claude Code subprocess from the user's ~/.claude config and plugin
+ * cache. Without this, the SDK subprocess auto-discovers every plugin enabled in
+ * ~/.claude/settings.json (Vercel plugin, superpowers, etc.) and runs their
+ * hooks — injecting unrelated skill suggestions into Craft Agent sessions.
+ *
+ * Pointing CLAUDE_CONFIG_DIR at a Craft-owned dir keeps Claude Code CLI behavior
+ * in a terminal unchanged, while suppressing all third-party plugin context here.
+ */
+const CRAFT_CLAUDE_CONFIG_DIR = join(homedir(), '.craft-agent', 'claude-config');
+try { mkdirSync(CRAFT_CLAUDE_CONFIG_DIR, { recursive: true }); } catch { /* best-effort */ }
 
 /** Image extensions that may need size-guard in PreToolUse (matches Read tool's image detection) */
 const IMAGE_READ_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tiff']);
@@ -1300,6 +1315,17 @@ export class ClaudeAgent extends BaseAgent {
         // No plugins — skills are handled by BaseAgent.chat() via read-before-execute
         // (the model reads SKILL.md files directly, enforced by PrerequisiteManager)
         plugins: [],
+        // Don't load CLAUDE.md / .claude/settings.json from any source. Craft owns
+        // the system prompt and source/permission system; user-level settings would
+        // re-introduce plugin hooks the line above is trying to suppress.
+        settingSources: [],
+        // Point the subprocess at a Craft-owned config dir so it cannot auto-discover
+        // plugins installed in the user's ~/.claude/plugins cache. Claude Code CLI in
+        // a terminal still uses ~/.claude and keeps all its plugins active.
+        env: {
+          ...process.env,
+          CLAUDE_CONFIG_DIR: CRAFT_CLAUDE_CONFIG_DIR,
+        },
       };
 
       // Track whether we're trying to resume a session (for error handling)
