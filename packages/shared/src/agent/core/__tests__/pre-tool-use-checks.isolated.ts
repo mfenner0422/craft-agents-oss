@@ -685,6 +685,15 @@ describe('runPreToolUseChecks', () => {
   describe('step 6: ask-mode prompt decision', () => {
     beforeEach(() => {
       mockEffectivePermissionMode = 'ask';
+      mockShouldAllowToolInMode.mockImplementation((toolName, _input, mode) => {
+        if (
+          mode === 'safe' &&
+          ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].includes(toolName)
+        ) {
+          return { allowed: false, reason: 'Blocked in safe mode' };
+        }
+        return { allowed: true, reason: '' };
+      });
     });
 
     it('prompts for bash commands in ask mode', () => {
@@ -713,6 +722,27 @@ describe('runPreToolUseChecks', () => {
         expect(result.promptType).toBe('file_write');
         expect(result.description).toContain('/test/file.ts');
       }
+    });
+
+    it('does not prompt for file writes allowed by permissions config in ask mode', () => {
+      mockShouldAllowToolInMode.mockImplementation((toolName, input, mode) => {
+        if (
+          mode === 'safe' &&
+          toolName === 'Write' &&
+          input.file_path === '/test/workspace/inbox/note.md'
+        ) {
+          return { allowed: true, reason: '' };
+        }
+        return { allowed: true, reason: '' };
+      });
+
+      const result = runPreToolUseChecks(createInput({
+        toolName: 'Write',
+        input: { file_path: '/test/workspace/inbox/note.md', content: 'hello' },
+        permissionMode: 'ask',
+      }));
+
+      expect(result.type).toBe('allow');
     });
 
     it('prompts for Edit in ask mode', () => {
@@ -919,6 +949,15 @@ describe('shouldPromptInAskMode', () => {
   beforeEach(() => {
     pm = createMockPermissionManager();
     mockShouldAllowToolInMode.mockReset();
+    mockShouldAllowToolInMode.mockImplementation((toolName, _input, mode) => {
+      if (
+        mode === 'safe' &&
+        ['Write', 'Edit', 'MultiEdit', 'NotebookEdit'].includes(toolName)
+      ) {
+        return { allowed: false, reason: 'Blocked in safe mode' };
+      }
+      return { allowed: true, reason: '' };
+    });
     mockIsApiEndpointAllowed.mockReset();
     mockIsApiEndpointAllowed.mockImplementation(() => false);
     mockIsReadOnlyBashCommandWithConfig.mockReset();

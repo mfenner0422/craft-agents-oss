@@ -1007,6 +1007,17 @@ export function shouldPromptInAskMode(
 
   // --- File writes ---
   if (FILE_WRITE_TOOLS.has(toolName)) {
+    const safeModeResult = shouldAllowToolInMode(
+      toolName,
+      input,
+      'safe',
+      { plansFolderPath, permissionsContext }
+    );
+    if (safeModeResult.allowed) {
+      onDebug?.(`Auto-allowing "${toolName}" (allowed by permissions config)`);
+      return null;
+    }
+
     if (permissionManager.isCommandWhitelisted(toolName)) {
       onDebug?.(`Auto-allowing "${toolName}" (previously approved)`);
       return null;
@@ -1064,7 +1075,7 @@ export function shouldPromptInAskMode(
   if (toolName.startsWith('mcp__')) {
     // Check if it would be blocked in safe mode (= it's a mutation)
     const safeModeResult = shouldAllowToolInMode(
-      toolName, input, 'safe', { plansFolderPath }
+      toolName, input, 'safe', { plansFolderPath, permissionsContext }
     );
     if (!safeModeResult.allowed) {
       // It's a mutation — check whitelist
