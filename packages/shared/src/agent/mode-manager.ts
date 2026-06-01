@@ -2020,6 +2020,14 @@ export function shouldAllowToolInMode(
         return { allowed: true };
       }
 
+      // User-extensible: permissions.json allowedMcpPatterns can opt-in additional
+      // session tools (e.g. inter-session messaging for nightly digests). This also
+      // skips the ask-mode permission prompt, since the prompt decision asks
+      // "would safe mode allow this?" and treats yes as auto-approve.
+      if (isReadOnlyMcpToolWithConfig(toolName, config)) {
+        return { allowed: true };
+      }
+
       // Write/auth/admin session tools - blocked in Explore mode
       return {
         allowed: false,
