@@ -1,6 +1,6 @@
 {
   "name": "@craft-agent/ui",
-  "version": "0.8.12",
+  "version": "0.10.0",
   "license": "Apache-2.0",
   "description": "Shared React UI components for Craft Agents - session viewer, chat display, markdown rendering",
   "type": "module",
@@ -15,11 +15,13 @@
     "./days": "./src/components/days/index.ts",
     "./markdown": "./src/components/markdown/index.ts",
     "./annotations/follow-up-state": "./src/components/annotations/follow-up-state.ts",
+    "./ui/drawer": "./src/components/ui/drawer.tsx",
     "./context": "./src/context/index.ts",
     "./styles": "./src/styles/index.css"
   },
   "dependencies": {
     "@craft-agent/core": "workspace:*",
+    "@craft-agent/shared": "workspace:*",
     "@paper-design/shaders-react": "^0.0.69",
     "beautiful-mermaid": "*",
     "@types/mdast": "^4.0.0",
@@ -56,7 +58,8 @@
     "tailwindcss": ">=4.0.0",
     "react-pdf": ">=10.0.0",
     "i18next": ">=26.0.0",
-    "react-i18next": ">=17.0.0"
+    "react-i18next": ">=17.0.0",
+    "vaul": ">=1.0.0"
   },
   "peerDependenciesMeta": {
     "@dnd-kit/core": {
@@ -78,6 +81,9 @@
       "optional": true
     },
     "jotai": {
+      "optional": true
+    },
+    "vaul": {
       "optional": true
     }
   }

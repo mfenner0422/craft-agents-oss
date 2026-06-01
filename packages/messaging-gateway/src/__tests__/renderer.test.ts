@@ -264,6 +264,39 @@ describe('Renderer — progress mode (default)', () => {
     expect(sends.map((s) => s.text)).toEqual(['🔧 Read…', 'The answer is 42.'])
   })
 
+  it('tool-terminated run with no non-intermediate final → falls back to last assistant text', async () => {
+    const adapter = makeAdapter()
+    const binding = makeBinding()
+    // Automation pattern: agent narrates, calls a tool to deliver its result,
+    // and never emits a clean non-intermediate final text_complete.
+    await play(renderer, binding, adapter, [
+      ev.intermediate('Sending the report now.'),
+      ev.toolStart('SendTelegram'),
+      ev.toolResult(),
+      ev.complete(),
+    ])
+
+    const edits = adapter.calls.filter((c) => c.kind === 'editMessage')
+    // Must NOT be left frozen on a status label; the last assistant text wins.
+    expect(edits.at(-1)!.text).toBe('Sending the report now.')
+    expect(edits.some((e) => e.text === '💭 thinking…')).toBe(true)
+  })
+
+  it('still leaves status in place when the run produced no assistant text at all', async () => {
+    const adapter = makeAdapter()
+    const binding = makeBinding()
+    await play(renderer, binding, adapter, [
+      ev.toolStart('Read'),
+      ev.toolResult(),
+      ev.complete(),
+    ])
+    const all = adapter.calls
+      .filter((c) => c.kind === 'sendText' || c.kind === 'editMessage')
+      .map((c) => c.text ?? '')
+    // No empty-string edit on complete (would trip Telegram "not modified").
+    expect(all.every((t) => t.length > 0)).toBe(true)
+  })
+
   it('collapses redundant status edits (same status twice = one edit total)', async () => {
     const adapter = makeAdapter()
     const binding = makeBinding()
@@ -316,6 +349,35 @@ describe('Renderer — final_only mode', () => {
     const binding = makeBinding({ responseMode: 'final_only' as ResponseMode })
     await play(renderer, binding, adapter, [ev.toolStart('Read'), ev.toolResult(), ev.complete()])
     expect(adapter.calls.filter((c) => c.kind !== 'sendTyping')).toHaveLength(0)
+  })
+
+  it('tool-terminated run with only intermediate text → still sends the last assistant text', async () => {
+    const adapter = makeAdapter()
+    const binding = makeBinding({ responseMode: 'final_only' as ResponseMode })
+    await play(renderer, binding, adapter, [
+      ev.intermediate('Here is the summary you asked for.'),
+      ev.toolStart('SendTelegram'),
+      ev.toolResult(),
+      ev.complete(),
+    ])
+
+    const sends = adapter.calls.filter((c) => c.kind === 'sendText')
+    expect(sends.length).toBe(1)
+    expect(sends[0]!.text).toBe('Here is the summary you asked for.')
+  })
+
+  it('non-intermediate final is preferred over earlier intermediate text', async () => {
+    const adapter = makeAdapter()
+    const binding = makeBinding({ responseMode: 'final_only' as ResponseMode })
+    await play(renderer, binding, adapter, [
+      ev.intermediate('thinking out loud'),
+      ev.final('The real answer.'),
+      ev.complete(),
+    ])
+
+    const sends = adapter.calls.filter((c) => c.kind === 'sendText')
+    expect(sends.length).toBe(1)
+    expect(sends[0]!.text).toBe('The real answer.')
   })
 
   it('treats text_complete without isIntermediate as final (backwards compat)', async () => {
@@ -426,6 +488,41 @@ describe('Renderer — permissions and errors', () => {
     expect(buttons.length).toBe(1)
   })
 
+  it('permission_request fires recordPermissionMessage with the rendering binding, requestId, messageId', async () => {
+    const recorded: Array<{ bindingId: string; sessionId: string; requestId: string; messageId: string }> = []
+    const renderer = new Renderer({
+      recordPermissionMessage: (b, requestId, messageId) => {
+        recorded.push({
+          bindingId: b.id,
+          sessionId: b.sessionId,
+          requestId,
+          messageId,
+        })
+      },
+    })
+    const adapter = makeAdapter()
+    const binding = makeBinding({ approvalChannel: 'chat' })
+    await renderer.handle(
+      {
+        type: 'permission_request',
+        sessionId: 's',
+        request: {
+          requestId: 'r1',
+          toolName: 'bash',
+          description: 'run tests',
+        },
+      } as SessionEvent,
+      binding,
+      adapter,
+    )
+
+    expect(recorded).toHaveLength(1)
+    expect(recorded[0]?.bindingId).toBe(binding.id)
+    expect(recorded[0]?.sessionId).toBe(binding.sessionId)
+    expect(recorded[0]?.requestId).toBe('r1')
+    expect(recorded[0]?.messageId).toBeTruthy()
+  })
+
   it('error event emits ❌ message and resets state', async () => {
     const renderer = new Renderer()
     const adapter = makeAdapter()
@@ -443,93 +540,6 @@ describe('Renderer — permissions and errors', () => {
   })
 })
 
-describe('Renderer — Telegram credential prompts', () => {
-  it('sends a bearer credential prompt and registers the pending request', async () => {
-    const registrations: unknown[] = []
-    const renderer = new Renderer({
-      registerPendingCredential(binding, request) {
-        registrations.push({ binding, request })
-      },
-    })
-    const adapter = makeAdapter()
-    const binding = makeBinding()
-
-    await renderer.handle(
-      {
-        type: 'auth_request',
-        sessionId: 's',
-        request: {
-          type: 'credential',
-          requestId: 'cred-1',
-          sourceName: 'GitHub',
-          mode: 'bearer',
-          labels: { credential: 'PAT' },
-          hint: 'Use the Rocky vault item.',
-        },
-      } as SessionEvent,
-      binding,
-      adapter,
-    )
-
-    const sends = adapter.calls.filter((c) => c.kind === 'sendText')
-    expect(sends).toHaveLength(1)
-    expect(sends[0]!.text).toContain('Authentication required')
-    expect(sends[0]!.text).toContain('GitHub')
-    expect(sends[0]!.text).toContain('Reply with your PAT')
-    expect(registrations).toHaveLength(1)
-  })
-
-  it('explains basic-auth replies as two lines', async () => {
-    const renderer = new Renderer({ registerPendingCredential() {} })
-    const adapter = makeAdapter()
-    const binding = makeBinding()
-
-    await renderer.handle(
-      {
-        type: 'auth_request',
-        sessionId: 's',
-        request: {
-          type: 'credential',
-          requestId: 'cred-1',
-          sourceName: 'Private API',
-          mode: 'basic',
-          labels: { username: 'user', password: 'secret' },
-        },
-      } as SessionEvent,
-      binding,
-      adapter,
-    )
-
-    const sends = adapter.calls.filter((c) => c.kind === 'sendText')
-    expect(sends[0]!.text).toContain('user and secret on separate lines')
-  })
-
-  it('explains multi-header replies as JSON with required headers', async () => {
-    const renderer = new Renderer({ registerPendingCredential() {} })
-    const adapter = makeAdapter()
-    const binding = makeBinding()
-
-    await renderer.handle(
-      {
-        type: 'auth_request',
-        sessionId: 's',
-        request: {
-          type: 'credential',
-          requestId: 'cred-1',
-          sourceName: 'Datadog',
-          mode: 'multi-header',
-          headerNames: ['DD-API-KEY', 'DD-APPLICATION-KEY'],
-        },
-      } as SessionEvent,
-      binding,
-      adapter,
-    )
-
-    const sends = adapter.calls.filter((c) => c.kind === 'sendText')
-    expect(sends[0]!.text).toContain('JSON object')
-    expect(sends[0]!.text).toContain('DD-API-KEY, DD-APPLICATION-KEY')
-  })
-})
 
 
 describe('Renderer — WhatsApp desktop-only approvals', () => {

@@ -9,7 +9,6 @@
  */
 
 /// <reference path="../bash-parser.d.ts" />
-
 import bashParser from 'bash-parser';
 import { looksLikePowerShell, extractPowerShellReadTarget } from '../powershell-validator.ts';
 
@@ -342,3 +341,4 @@ function parseTailCommand(args: string[], original: string): ReadCommandInfo | n
 
   return null;
 }
+

@@ -28,10 +28,21 @@
 import type {
   PlatformAdapter,
   ChannelBinding,
+  SendOptions,
   SentMessage,
   InlineButton,
   ResponseMode,
 } from './types'
+
+/**
+ * Build the per-call options bag from a binding. Currently only `threadId`
+ * (Telegram supergroup forum topic) flows through. WhatsApp and DMs leave
+ * `threadId` undefined, which the adapters' `threadParams()` helper turns
+ * into a no-op spread.
+ */
+function bindingOpts(binding: ChannelBinding): SendOptions {
+  return binding.threadId !== undefined ? { threadId: binding.threadId } : {}
+}
 import type { PlanTokenRegistry } from './plan-tokens'
 
 /** Session event shape (subset of the full SessionEvent from server-core). */
@@ -64,16 +75,24 @@ interface RenderState {
   lastEditedLength: number
   /** Current effective edit interval (may increase on 429). */
   currentEditIntervalMs: number
-  /** Telegram native typing indicator pump for long-running responses. */
-  typingTimer: ReturnType<typeof setInterval> | null
 
   // --- progress / final_only modes -------------------------------------
   /** Progress/final_only: non-intermediate assistant text accumulated this run. */
   finalBuffer: string
+  /**
+   * Progress/final_only: the most recent non-empty assistant text seen this
+   * run, regardless of `isIntermediate`. Used as a fallback on `complete`
+   * when the run never produced a clean non-intermediate final turn (common
+   * for automations whose last action is a tool call) so we still deliver
+   * the agent's message instead of stranding the user on "thinking…".
+   */
+  lastAssistantText: string
   /** Progress: id of the single evolving message for this run (null before first activity). */
   progressMessageId: string | null
   /** Progress: last status label written to the bubble, to avoid redundant edits. */
   progressStatus: string | null
+  /** Telegram typing-indicator pump (kept alive while the agent is producing). */
+  typingTimer: ReturnType<typeof setInterval> | null
 }
 
 const DEFAULT_EDIT_INTERVAL_MS = 3500
@@ -101,65 +120,34 @@ export type PlanMessageRecorder = (
   messageId: string,
 ) => void
 
-/** Shape of the credential auth request extracted from the auth_request event. */
-interface CredentialAuthRequestData {
-  requestId: string
-  sourceName: string
-  mode: string
-  description?: string
-  hint?: string
-  labels?: {
-    credential?: string
-    username?: string
-    password?: string
-  }
-  headerNames?: string[]
-  passwordRequired?: boolean
-}
-
 /**
- * Hook the renderer calls when it sends a Telegram credential prompt, so the
- * gateway can intercept the user's next reply as the credential value.
+ * Hook the renderer calls when a permission prompt with inline buttons has
+ * just been posted. Mirrors {@link PlanMessageRecorder}; the gateway uses
+ * this to track live prompts so it can (a) idempotently claim the prompt on
+ * tap, and (b) clear the inline keyboard when the agent moves on (resolved
+ * from any channel — desktop, MCP, etc.).
  */
-export type CredentialRequestRegistrar = (
+export type PermissionMessageRecorder = (
   binding: ChannelBinding,
-  request: CredentialAuthRequestData,
+  requestId: string,
+  messageId: string,
 ) => void
-
-function replyInstructionsForCredentialRequest(request: CredentialAuthRequestData): string {
-  if (request.mode === 'basic') {
-    const usernameLabel = request.labels?.username ?? 'username'
-    const passwordLabel = request.labels?.password ?? 'password'
-    if (request.passwordRequired === false) {
-      return `Reply with ${usernameLabel}, or /cancel to skip.`
-    }
-    return `Reply with ${usernameLabel} and ${passwordLabel} on separate lines, or /cancel to skip.`
-  }
-
-  if (request.mode === 'multi-header') {
-    const names = request.headerNames?.length ? request.headerNames.join(', ') : 'the required header names'
-    return `Reply with a JSON object containing ${names}, or /cancel to skip.`
-  }
-
-  const credentialLabel = request.labels?.credential ?? 'credential'
-  return `Reply with your ${credentialLabel}, or /cancel to skip.`
-}
 
 export class Renderer {
   /** Per-binding render state. Keyed by binding.id */
   private states = new Map<string, RenderState>()
   private readonly planTokens: PlanTokenRegistry | undefined
   private readonly recordPlanMessage: PlanMessageRecorder | undefined
-  private readonly registerPendingCredential: CredentialRequestRegistrar | undefined
+  private readonly recordPermissionMessage: PermissionMessageRecorder | undefined
 
   constructor(deps?: {
     planTokens?: PlanTokenRegistry
     recordPlanMessage?: PlanMessageRecorder
-    registerPendingCredential?: CredentialRequestRegistrar
+    recordPermissionMessage?: PermissionMessageRecorder
   }) {
     this.planTokens = deps?.planTokens
     this.recordPlanMessage = deps?.recordPlanMessage
-    this.registerPendingCredential = deps?.registerPendingCredential
+    this.recordPermissionMessage = deps?.recordPermissionMessage
   }
 
   private getState(bindingId: string): RenderState {
@@ -172,10 +160,11 @@ export class Renderer {
         editTimer: null,
         lastEditedLength: 0,
         currentEditIntervalMs: DEFAULT_EDIT_INTERVAL_MS,
-        typingTimer: null,
         finalBuffer: '',
+        lastAssistantText: '',
         progressMessageId: null,
         progressStatus: null,
+        typingTimer: null,
       }
       this.states.set(bindingId, state)
     }
@@ -188,19 +177,21 @@ export class Renderer {
     binding: ChannelBinding,
     adapter: PlatformAdapter,
   ): Promise<void> {
+    // Keep the Telegram "typing…" indicator alive across the whole streaming
+    // run (5s default timeout per message, so we re-send every 4s). Stopped
+    // by resetRun() on complete/error and removeBinding() on cleanup.
+    if (isProcessingActivityEvent(event.type)) {
+      this.startTypingPump(this.getState(binding.id), binding, adapter)
+    }
+
     // Permission / error prompts are mode-agnostic — handle first so they
     // can't be swallowed by mode state.
     if (event.type === 'permission_request') {
       await this.handlePermissionRequest(event, binding, adapter, this.getState(binding.id))
       return
     }
-    if (event.type === 'auth_request') {
-      const authReq = event.request as CredentialAuthRequestData & { type?: string } | undefined
-      if (authReq?.type === 'credential' && authReq.requestId) {
-        const state = this.getState(binding.id)
-        this.stopTypingPump(state)
-        await this.handleCredentialRequest(binding, adapter, authReq)
-      }
+    if (event.type === 'credential_request') {
+      await this.handleCredentialRequest(binding, adapter)
       return
     }
     if (event.type === 'plan_submitted') {
@@ -210,11 +201,6 @@ export class Renderer {
     if (event.type === 'error' || event.type === 'typed_error') {
       await this.handleError(event, binding, adapter, this.getState(binding.id))
       return
-    }
-
-    const state = this.getState(binding.id)
-    if (isProcessingActivityEvent(event.type)) {
-      this.startTypingPump(state, binding, adapter)
     }
 
     const mode = resolveResponseMode(binding.config.responseMode, binding.config.streamResponses)
@@ -258,7 +244,7 @@ export class Renderer {
 
         if (state.streamingMessageId && adapter.capabilities.messageEditing) {
           if (text.trim()) {
-            await this.tryEditMessage(adapter, binding.channelId, state.streamingMessageId, text.trim(), state)
+            await this.tryEditMessage(adapter, binding, state.streamingMessageId, text.trim(), state)
           }
         } else if (text.trim()) {
           await this.sendText(adapter, binding, text.trim())
@@ -288,7 +274,7 @@ export class Renderer {
             this.cancelEditTimer(state)
             await this.tryEditMessage(
               adapter,
-              binding.channelId,
+              binding,
               state.streamingMessageId,
               state.textBuffer.trim(),
               state,
@@ -297,9 +283,9 @@ export class Renderer {
             state.textBuffer = ''
             state.lastEditedLength = 0
           }
-          await adapter.sendText(binding.channelId, `🔧 ${displayName}...`)
+          await adapter.sendText(binding.channelId, `🔧 ${displayName}...`, bindingOpts(binding))
         } else {
-          await adapter.sendTyping(binding.channelId).catch(() => {})
+          await adapter.sendTyping(binding.channelId, bindingOpts(binding)).catch(() => {})
         }
         break
       }
@@ -313,7 +299,7 @@ export class Renderer {
   ): Promise<void> {
     if (!state.streamingMessageId && state.textBuffer.length > 0) {
       try {
-        const sent = await adapter.sendText(binding.channelId, state.textBuffer)
+        const sent = await adapter.sendText(binding.channelId, state.textBuffer, bindingOpts(binding))
         state.streamingMessageId = sent.messageId
         state.lastEditedLength = state.textBuffer.length
         this.scheduleEdit(state, binding, adapter)
@@ -341,7 +327,7 @@ export class Renderer {
       const text = state.textBuffer.trim()
       if (!text) return
 
-      await this.tryEditMessage(adapter, binding.channelId, state.streamingMessageId, text, state)
+      await this.tryEditMessage(adapter, binding, state.streamingMessageId, text, state)
       state.lastEditedLength = state.textBuffer.length
 
       if (state.processing) {
@@ -369,11 +355,16 @@ export class Renderer {
       case 'text_complete': {
         const isIntermediate = Boolean(event.isIntermediate)
         const text = typeof event.text === 'string' ? event.text : ''
-        if (!isIntermediate && text.trim()) {
-          // Last assistant text of the run — keep it for the final edit.
-          state.finalBuffer = appendFinal(state.finalBuffer, text)
+        if (text.trim()) {
+          if (!isIntermediate) {
+            // Last assistant text of the run — keep it for the final edit.
+            state.finalBuffer = appendFinal(state.finalBuffer, text)
+          }
+          // Always remember the latest assistant text so `complete` can fall
+          // back to it if the run never produces a non-intermediate final.
+          state.lastAssistantText = text
         }
-        // Intermediate text is dropped. Make sure the bubble exists and shows
+        // Intermediate text is dropped from the bubble. Make sure it exists and shows
         // thinking status so the user knows the run is alive.
         await this.ensureProgressBubble(state, binding, adapter, THINKING_LABEL)
         return
@@ -399,19 +390,22 @@ export class Renderer {
       }
 
       case 'complete': {
-        const finalText = state.finalBuffer.trim()
+        // Prefer the clean non-intermediate final; fall back to the last
+        // assistant text so a tool-terminated run still delivers a message
+        // instead of freezing the bubble on "thinking…".
+        const finalText = (state.finalBuffer.trim() || state.lastAssistantText.trim())
         if (state.progressMessageId && adapter.capabilities.messageEditing) {
           if (finalText) {
             await this.tryEditMessage(
               adapter,
-              binding.channelId,
+              binding,
               state.progressMessageId,
               truncateForAdapter(finalText, adapter),
               state,
             )
           }
-          // If the run ended with no final text, leave the last status in
-          // place rather than deleting/editing to an empty string — avoids
+          // If the run produced no assistant text at all, leave the last
+          // status in place rather than editing to an empty string — avoids
           // Telegram "message is not modified" errors and keeps a trace.
         } else if (finalText) {
           // Adapter can't edit (WhatsApp) — send one message at the end.
@@ -436,7 +430,7 @@ export class Renderer {
   ): Promise<void> {
     if (!state.progressMessageId) {
       try {
-        const sent = await adapter.sendText(binding.channelId, status)
+        const sent = await adapter.sendText(binding.channelId, status, bindingOpts(binding))
         state.progressMessageId = sent.messageId
         state.progressStatus = status
       } catch {
@@ -446,7 +440,7 @@ export class Renderer {
     }
     if (!adapter.capabilities.messageEditing) return
     if (state.progressStatus === status) return
-    await this.tryEditMessage(adapter, binding.channelId, state.progressMessageId, status, state)
+    await this.tryEditMessage(adapter, binding, state.progressMessageId, status, state)
     state.progressStatus = status
   }
 
@@ -468,14 +462,21 @@ export class Renderer {
         // because it's the only thing we might ever see.
         const isIntermediate = Boolean(event.isIntermediate)
         const text = typeof event.text === 'string' ? event.text : ''
-        if (!isIntermediate && text.trim()) {
-          state.finalBuffer = appendFinal(state.finalBuffer, text)
+        if (text.trim()) {
+          if (!isIntermediate) {
+            state.finalBuffer = appendFinal(state.finalBuffer, text)
+          }
+          // Fallback for runs that never emit a non-intermediate final turn.
+          state.lastAssistantText = text
         }
         return
       }
 
       case 'complete': {
-        const finalText = state.finalBuffer.trim()
+        // Prefer the clean non-intermediate final; fall back to the last
+        // assistant text so final_only still delivers something rather than
+        // staying silent when the run ends on a tool call.
+        const finalText = (state.finalBuffer.trim() || state.lastAssistantText.trim())
         if (finalText) {
           await this.sendText(adapter, binding, finalText)
         }
@@ -498,7 +499,6 @@ export class Renderer {
   ): Promise<void> {
     const request = event.request as PermissionRequest | undefined
     if (!request?.requestId) return
-    this.stopTypingPump(state)
 
     // Flush any streaming state first so the prompt lands as a distinct
     // message (progress-mode bubble stays in place as a separate message).
@@ -506,7 +506,7 @@ export class Renderer {
       this.cancelEditTimer(state)
       await this.tryEditMessage(
         adapter,
-        binding.channelId,
+        binding,
         state.streamingMessageId,
         state.textBuffer.trim(),
         state,
@@ -521,6 +521,7 @@ export class Renderer {
         binding.channelId,
         `⏸ Permission required: ${request.description}
 Approve it in the desktop app to continue.`,
+        bindingOpts(binding),
       )
       return
     }
@@ -531,12 +532,14 @@ Approve it in the desktop app to continue.`,
         { id: `perm:allow:${request.requestId}`, label: '✅ Allow' },
         { id: `perm:deny:${request.requestId}`, label: '❌ Deny' },
       ]
-      await adapter.sendButtons(binding.channelId, text, buttons)
+      const sent = await adapter.sendButtons(binding.channelId, text, buttons, bindingOpts(binding))
+      this.recordPermissionMessage?.(binding, request.requestId, sent.messageId)
     } else {
       await adapter.sendText(
         binding.channelId,
         `⏸ Permission required: ${request.description}
 Approve in the desktop app to continue.`,
+        bindingOpts(binding),
       )
     }
   }
@@ -544,28 +547,13 @@ Approve in the desktop app to continue.`,
   private async handleCredentialRequest(
     binding: ChannelBinding,
     adapter: PlatformAdapter,
-    request: CredentialAuthRequestData,
   ): Promise<void> {
-    if (binding.platform === 'whatsapp') {
-      await adapter.sendText(
-        binding.channelId,
-        '🔐 Credentials are required to continue. Open the desktop app to review and submit them securely.',
-      )
-      return
-    }
-
-    if (binding.platform !== 'telegram') return
-
-    const lines: string[] = [
-      `🔐 *Authentication required* for *${request.sourceName}*`,
-    ]
-    if (request.description) lines.push(request.description)
-    if (request.hint) lines.push(`_Hint: ${request.hint}_`)
-    lines.push('')
-    lines.push(replyInstructionsForCredentialRequest(request))
-
-    await adapter.sendText(binding.channelId, lines.join('\n'))
-    this.registerPendingCredential?.(binding, request)
+    if (binding.platform !== 'whatsapp') return
+    await adapter.sendText(
+      binding.channelId,
+      '🔐 Credentials are required to continue. Open the desktop app to review and submit them securely.',
+      bindingOpts(binding),
+    )
   }
 
   private async handlePlanSubmitted(
@@ -578,18 +566,23 @@ Approve in the desktop app to continue.`,
       await adapter.sendText(
         binding.channelId,
         '📝 A plan is ready for review. Open the desktop app to inspect and approve it.',
+        bindingOpts(binding),
       )
       return
     }
 
-    if (binding.platform !== 'telegram') return
+    // Telegram + Lark both support inline buttons through the same
+    // `sendButtons` contract; either gets the rich plan card. Anything else
+    // is treated like WhatsApp above and gated out earlier.
+    if (binding.platform !== 'telegram' && binding.platform !== 'lark') return
 
     // Token registry is optional for backwards compatibility; without it we
-    // degrade to the generic pointer so Telegram still sees *something*.
+    // degrade to the generic pointer so the bot still sees *something*.
     if (!this.planTokens) {
       await adapter.sendText(
         binding.channelId,
         '📝 A plan is ready for review. Open the desktop app to inspect and approve it.',
+        bindingOpts(binding),
       )
       return
     }
@@ -616,7 +609,7 @@ Approve in the desktop app to continue.`,
         : `${header}\n\n${firstLines(planContent, 15)}\n\n…full plan attached below.`
 
     try {
-      const sent = await adapter.sendButtons(binding.channelId, bodyText, buttons)
+      const sent = await adapter.sendButtons(binding.channelId, bodyText, buttons, bindingOpts(binding))
       this.recordPlanMessage?.(binding, token, sent.messageId)
 
       if (!fitsInline && planContent.length > 0) {
@@ -625,6 +618,7 @@ Approve in the desktop app to continue.`,
           Buffer.from(planContent, 'utf-8'),
           'plan.md',
           'Full plan',
+          bindingOpts(binding),
         )
       }
     } catch (err) {
@@ -634,6 +628,7 @@ Approve in the desktop app to continue.`,
         `📝 A plan is ready for review (couldn't render inline: ${
           err instanceof Error ? err.message : 'unknown error'
         }). Open the desktop app to approve it.`,
+        bindingOpts(binding),
       )
     }
   }
@@ -646,8 +641,7 @@ Approve in the desktop app to continue.`,
   ): Promise<void> {
     const errorMsg = extractErrorMessage(event.error)
     this.cancelEditTimer(state)
-    this.stopTypingPump(state)
-    await adapter.sendText(binding.channelId, `❌ ${errorMsg}`)
+    await adapter.sendText(binding.channelId, `❌ ${errorMsg}`, bindingOpts(binding))
     this.resetRun(state)
   }
 
@@ -657,7 +651,7 @@ Approve in the desktop app to continue.`,
 
   private async tryEditMessage(
     adapter: PlatformAdapter,
-    channelId: string,
+    binding: ChannelBinding,
     messageId: string,
     text: string,
     state: RenderState,
@@ -665,7 +659,9 @@ Approve in the desktop app to continue.`,
     const truncated = truncateForAdapter(text, adapter)
 
     try {
-      await adapter.editMessage(channelId, messageId, truncated)
+      // editMessage on Telegram is keyed by (chat_id, message_id) and ignores
+      // message_thread_id, but we pass it for caller uniformity.
+      await adapter.editMessage(binding.channelId, messageId, truncated, bindingOpts(binding))
       state.currentEditIntervalMs = DEFAULT_EDIT_INTERVAL_MS
     } catch (err: unknown) {
       const is429 =
@@ -688,26 +684,6 @@ Approve in the desktop app to continue.`,
     }
   }
 
-  private startTypingPump(
-    state: RenderState,
-    binding: ChannelBinding,
-    adapter: PlatformAdapter,
-  ): void {
-    if (adapter.platform !== 'telegram') return
-    if (state.typingTimer) return
-
-    void adapter.sendTyping(binding.channelId).catch(() => {})
-    state.typingTimer = setInterval(() => {
-      void adapter.sendTyping(binding.channelId).catch(() => {})
-    }, TYPING_PUMP_INTERVAL_MS)
-  }
-
-  private stopTypingPump(state: RenderState): void {
-    if (!state.typingTimer) return
-    clearInterval(state.typingTimer)
-    state.typingTimer = null
-  }
-
   /** Reset per-run state (called on `complete`, `error`, etc.). */
   private resetRun(state: RenderState): void {
     this.cancelEditTimer(state)
@@ -717,8 +693,30 @@ Approve in the desktop app to continue.`,
     state.lastEditedLength = 0
     state.processing = false
     state.finalBuffer = ''
+    state.lastAssistantText = ''
     state.progressMessageId = null
     state.progressStatus = null
+  }
+
+  private startTypingPump(
+    state: RenderState,
+    binding: ChannelBinding,
+    adapter: PlatformAdapter,
+  ): void {
+    if (adapter.platform !== 'telegram') return
+    if (state.typingTimer) return
+
+    const opts = bindingOpts(binding)
+    void adapter.sendTyping(binding.channelId, opts).catch(() => {})
+    state.typingTimer = setInterval(() => {
+      void adapter.sendTyping(binding.channelId, opts).catch(() => {})
+    }, TYPING_PUMP_INTERVAL_MS)
+  }
+
+  private stopTypingPump(state: RenderState): void {
+    if (!state.typingTimer) return
+    clearInterval(state.typingTimer)
+    state.typingTimer = null
   }
 
   /** Send text, splitting if it exceeds platform limits. */
@@ -728,14 +726,15 @@ Approve in the desktop app to continue.`,
     text: string,
   ): Promise<SentMessage | undefined> {
     const maxLen = adapter.capabilities.maxMessageLength
+    const opts = bindingOpts(binding)
     if (text.length <= maxLen) {
-      return adapter.sendText(binding.channelId, text)
+      return adapter.sendText(binding.channelId, text, opts)
     }
 
     const chunks = splitText(text, maxLen)
     let last: SentMessage | undefined
     for (const chunk of chunks) {
-      last = await adapter.sendText(binding.channelId, chunk)
+      last = await adapter.sendText(binding.channelId, chunk, opts)
     }
     return last
   }
@@ -751,6 +750,13 @@ Approve in the desktop app to continue.`,
   }
 }
 
+function isProcessingActivityEvent(type: string): boolean {
+  return type === 'text_delta' ||
+    type === 'text_complete' ||
+    type === 'tool_start' ||
+    type === 'tool_result'
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -762,13 +768,6 @@ function resolveResponseMode(
   if (responseMode) return responseMode
   // Legacy configs (pre-responseMode field): honour explicit streamResponses.
   return streamResponses === false ? 'final_only' : 'streaming'
-}
-
-function isProcessingActivityEvent(type: string): boolean {
-  return type === 'text_delta' ||
-    type === 'text_complete' ||
-    type === 'tool_start' ||
-    type === 'tool_result'
 }
 
 function appendFinal(existing: string, next: string): string {

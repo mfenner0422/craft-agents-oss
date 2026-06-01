@@ -45,6 +45,9 @@ export interface EntityPanelProps<T> {
   selectedId?: string | null
   emptyState?: React.ReactNode
   className?: string
+  /** Extra data/aria attributes merged onto the inner list container.
+   *  Use to set `data-list-role` so compact-mode CSS can target the right list. */
+  containerProps?: Record<string, string>
 }
 
 export function EntityPanel<T>({
@@ -61,6 +64,7 @@ export function EntityPanel<T>({
   selectedId,
   emptyState,
   className,
+  containerProps,
 }: EntityPanelProps<T>) {
   const selectionStore = selection.useSelectionStore()
   const interactions = useEntityListInteractions<T>({
@@ -87,6 +91,10 @@ export function EntityPanel<T>({
     items.forEach((item, idx) => map.set(getId(item), idx))
     return map
   }, [items, getId])
+
+  const mergedContainerProps = containerProps
+    ? { ...interactions.listProps.containerProps, ...containerProps }
+    : interactions.listProps.containerProps
 
   const renderItem = (item: T, indexFromList: number, isFirst: boolean) => {
     const mapped = mapItem(item)
@@ -120,7 +128,7 @@ export function EntityPanel<T>({
         groups={groups}
         getKey={getId}
         containerRef={interactions.listProps.containerRef}
-        containerProps={interactions.listProps.containerProps}
+        containerProps={mergedContainerProps}
         className={className}
         emptyState={emptyState}
         renderItem={renderItem}
@@ -137,7 +145,7 @@ export function EntityPanel<T>({
       items={items}
       getKey={getId}
       containerRef={interactions.listProps.containerRef}
-      containerProps={interactions.listProps.containerProps}
+      containerProps={mergedContainerProps}
       className={className}
       emptyState={emptyState}
       renderItem={renderItem}

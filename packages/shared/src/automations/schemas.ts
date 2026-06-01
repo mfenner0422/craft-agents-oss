@@ -8,16 +8,25 @@
 import { z } from 'zod';
 import type { ValidationIssue } from '../config/validators.ts';
 import { APP_EVENTS, AGENT_EVENTS } from './types.ts';
+import { THINKING_LEVEL_IDS, normalizeThinkingLevel } from '../agent/thinking-levels.ts';
 
 // ============================================================================
 // Zod Schemas
 // ============================================================================
+
+// Mirrors the workspace-default pattern in `config/storage.ts` so that the
+// legacy 'think' value is silently migrated to a current thinking level.
+const ThinkingLevelInputSchema = z
+  .enum([...THINKING_LEVEL_IDS, 'think'])
+  .transform((value) => normalizeThinkingLevel(value))
+  .optional();
 
 export const PromptActionSchema = z.object({
   type: z.literal('prompt'),
   prompt: z.string().min(1, 'Prompt cannot be empty'),
   llmConnection: z.string().min(1).optional(),
   model: z.string().min(1).optional(),
+  thinkingLevel: ThinkingLevelInputSchema,
 });
 
 export const WebhookActionSchema = z.object({
@@ -140,6 +149,9 @@ export const AutomationMatcherSchema = z.object({
   recovery: z.enum(['critical', 'soft', 'none']).optional(),
   recoveryGraceMinutes: z.number().int().positive().optional(),
   conditions: z.array(AutomationConditionSchema).optional(),
+  // Telegram forum-topic name (1–128 chars). Silently ignored at runtime when
+  // no supergroup is paired or the Telegram adapter is not connected.
+  telegramTopic: z.string().min(1).max(128).optional(),
   actions: z.array(ActionDefinitionSchema).min(1, 'At least one action required'),
 });
 
