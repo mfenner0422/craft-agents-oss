@@ -22,8 +22,8 @@ const MAX_CONTEXT_FILES = 30;
 /** Maximum combined Rocky persona/memory payload to append to the system prompt. */
 const MAX_ROCKY_PROMPT_SIZE = 10 * 1024;
 
-/** Root-level Rocky files injected into the static system prompt when present. */
-const ROCKY_SYSTEM_FILES = ['AGENTS.md', 'SOUL.md', 'USER.md', 'MEMORY.md'] as const;
+/** Rocky files injected into the static system prompt when present. */
+const ROCKY_SYSTEM_FILES = ['AGENTS.md', 'SOUL.md', 'memories/USER.md', 'memories/MEMORY.md'] as const;
 
 /**
  * Directories to exclude when searching for context files.
@@ -100,7 +100,7 @@ export function invalidateContextFileCache(directory?: string): void {
 }
 
 /**
- * Build Rocky's root-level persona/memory prompt extension.
+ * Build Rocky's persona/memory prompt extension.
  *
  * ClaudeAgent pins the returned system prompt components on the first chat in a
  * session, so this content is frozen for that session and refreshed by starting

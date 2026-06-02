@@ -1,5 +1,5 @@
 import { describe, it, expect, mock, beforeEach, afterEach } from 'bun:test'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
@@ -139,19 +139,20 @@ describe('includeCoAuthoredBy handling', () => {
 })
 
 describe('Rocky system prompt context', () => {
-  it('injects root Rocky files when present', () => {
+  it('injects Rocky files when present', () => {
     const workspace = tempWorkspace('rocky-system-')
+    mkdirSync(join(workspace, 'memories'))
     writeFileSync(join(workspace, 'AGENTS.md'), 'Operational harness')
     writeFileSync(join(workspace, 'SOUL.md'), 'Persona shape')
-    writeFileSync(join(workspace, 'USER.md'), 'Micah profile')
-    writeFileSync(join(workspace, 'MEMORY.md'), 'Durable fact')
+    writeFileSync(join(workspace, 'memories', 'USER.md'), 'Micah profile')
+    writeFileSync(join(workspace, 'memories', 'MEMORY.md'), 'Durable fact')
 
     const prompt = getSystemPrompt(undefined, undefined, workspace, workspace)
 
     expect(prompt).toContain('## Rocky Workspace Context')
     expect(prompt).toContain('# AGENTS.md')
     expect(prompt).toContain('Operational harness')
-    expect(prompt).toContain('# MEMORY.md')
+    expect(prompt).toContain('# memories/MEMORY.md')
     expect(prompt).toContain('Durable fact')
   })
 
@@ -163,7 +164,8 @@ describe('Rocky system prompt context', () => {
 
   it('rejects Rocky context above 10KB', () => {
     const workspace = tempWorkspace('rocky-large-system-')
-    writeFileSync(join(workspace, 'MEMORY.md'), 'x'.repeat(11 * 1024))
+    mkdirSync(join(workspace, 'memories'))
+    writeFileSync(join(workspace, 'memories', 'MEMORY.md'), 'x'.repeat(11 * 1024))
 
     expect(() => buildRockySystemPrompt(workspace)).toThrow('Rocky system prompt exceeds 10KB')
   })
