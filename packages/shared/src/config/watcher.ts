@@ -436,6 +436,9 @@ export class ConfigWatcher {
         const normalizedPath = filename.replace(/\\/g, '/');
         this.handleWorkspaceFileChange(normalizedPath, eventType);
       });
+      watcher.on('error', (error) => {
+        debug('[ConfigWatcher] Workspace watcher error:', error);
+      });
 
       this.watchers.push(watcher);
       debug('[ConfigWatcher] Watching workspace recursively:', this.workspaceDir);
