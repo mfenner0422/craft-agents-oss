@@ -6,7 +6,7 @@ import { validateFilePath, getWorkspaceAllowedDirs } from '@craft-agent/server-c
 import { createScopedLogger, CONSOLE_LOGGER, type PlatformServices, type Logger } from '@craft-agent/server-core/runtime'
 import { basename, dirname, join } from 'path'
 import { existsSync } from 'fs'
-import { readFile, writeFile, mkdir } from 'fs/promises'
+import { appendFile, readFile, writeFile, mkdir } from 'fs/promises'
 import { randomUUID } from 'node:crypto'
 import { type AgentEvent, setPermissionMode, hydratePreviousPermissionMode, getPermissionModeDiagnostics, type PermissionMode, unregisterSessionScopedToolCallbacks, mergeSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest, type BrowserPaneFns, generateConversationSummary } from '@craft-agent/shared/agent'
 import {
@@ -1115,6 +1115,9 @@ export class SessionManager implements ISessionManager {
   private pendingPermissionRequests: Map<string, {
     sessionId: string
     type?: 'bash' | 'file_write' | 'mcp_mutation' | 'api_mutation' | 'admin_approval'
+    toolName?: string
+    command?: string
+    description?: string
     commandHash?: string
   }> = new Map()
   // Privileged approval binding + audit logger
@@ -1125,6 +1128,20 @@ export class SessionManager implements ISessionManager {
     expiresAt: number
     sourceRequestId: string
   }> = new Map()
+
+  private async appendPermissionTelemetry(workspaceRootPath: string, event: Record<string, unknown>): Promise<void> {
+    try {
+      const stateDir = join(workspaceRootPath, 'state')
+      await mkdir(stateDir, { recursive: true })
+      await appendFile(
+        join(stateDir, 'permission-prompts.jsonl'),
+        `${JSON.stringify({ timestamp: new Date().toISOString(), ...event })}\n`,
+        'utf8',
+      )
+    } catch (err) {
+      sessionLog.warn('Failed to append permission telemetry', err)
+    }
+  }
   // Promise deduplication for lazy-loading messages (prevents race conditions)
   private messageLoadingPromises: Map<string, Promise<void>> = new Map()
   /**
@@ -3860,6 +3877,21 @@ export class SessionManager implements ISessionManager {
         this.pendingPermissionRequests.set(request.requestId, {
           sessionId: managed.id,
           type: request.type,
+          toolName: request.toolName,
+          command: request.command,
+          description: request.description,
+          commandHash: effectiveCommandHash,
+        })
+
+        void this.appendPermissionTelemetry(managed.workspace.rootPath, {
+          event: 'prompt',
+          sessionId: managed.id,
+          requestId: request.requestId,
+          toolName: request.toolName,
+          promptType: request.type,
+          command: request.command,
+          description: request.description,
+          reason: request.reason,
           commandHash: effectiveCommandHash,
         })
 
@@ -6563,6 +6595,17 @@ export class SessionManager implements ISessionManager {
       }
 
       sessionLog.info(`Permission response for ${requestId}: allowed=${allowed}, alwaysAllow=${alwaysAllow}`)
+      void this.appendPermissionTelemetry(managed.workspace.rootPath, {
+        event: 'response',
+        sessionId,
+        requestId,
+        toolName: requestMeta?.toolName,
+        promptType: requestMeta?.type,
+        command: requestMeta?.command,
+        description: requestMeta?.description,
+        allowed,
+        alwaysAllow,
+      })
       managed.agent.respondToPermission(requestId, allowed, alwaysAllow)
       return true
     } else {

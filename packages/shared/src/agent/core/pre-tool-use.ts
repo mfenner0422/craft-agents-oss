@@ -1000,6 +1000,14 @@ function classifyAdminApproval(command: string): PromptInfo | null {
   return null;
 }
 
+function matchesConfiguredBashPattern(command: string, permissionsContext: PermissionsContext): boolean {
+  const mergedConfig = permissionsConfigCache.getMergedConfig(permissionsContext);
+  return mergedConfig.readOnlyBashPatterns.some(pattern => {
+    pattern.regex.lastIndex = 0;
+    return pattern.regex.test(command);
+  });
+}
+
 function wrapCommandForMacAdminPrompt(command: string): string {
   // Escape for AppleScript shell string: \ -> \\, " -> \", $ -> \$
   const escaped = command
@@ -1061,6 +1069,14 @@ export function shouldPromptInAskMode(
     const adminPrompt = classifyAdminApproval(command);
     if (adminPrompt) {
       return adminPrompt;
+    }
+
+    // User-configured Bash patterns operate on the raw command. This matters
+    // for compound commands where the AST validator checks each simple command
+    // independently and can miss an exact full-command allowlist entry.
+    if (matchesConfiguredBashPattern(command, permissionsContext)) {
+      onDebug?.(`Auto-allowing Bash command via permissions.json: ${baseCommand}`);
+      return null;
     }
 
     // Auto-allow read-only commands using full AST-based validation

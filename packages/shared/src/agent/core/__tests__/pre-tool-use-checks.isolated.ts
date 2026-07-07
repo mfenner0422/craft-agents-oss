@@ -710,6 +710,24 @@ describe('runPreToolUseChecks', () => {
       }
     });
 
+    it('does not prompt for bash commands matching raw permissions config patterns in ask mode', () => {
+      mockReadOnlyBashPatterns = [
+        {
+          regex: /^ls\s+\/workspace\/state\/?\s+2>\/dev\/null\s+&&\s+cat\s+\/workspace\/state\/just-restarted\s+2>\/dev\/null\s+\|\|\s+echo\s+"No restart file"$/,
+        },
+      ];
+
+      const result = runPreToolUseChecks(createInput({
+        toolName: 'Bash',
+        input: {
+          command: 'ls /workspace/state/ 2>/dev/null && cat /workspace/state/just-restarted 2>/dev/null || echo "No restart file"',
+        },
+        permissionMode: 'ask',
+      }));
+
+      expect(result.type).toBe('allow');
+    });
+
     it('prompts for file write tools in ask mode', () => {
       const result = runPreToolUseChecks(createInput({
         toolName: 'Write',
