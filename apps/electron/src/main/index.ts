@@ -59,8 +59,22 @@ Sentry.init({
 })
 
 // Initialize i18n for main process (menus, dialogs, etc.)
-import { setupI18n, i18n } from '@craft-agent/shared/i18n'
+//
+// The main-process i18n instance has no detection plugin (no localStorage in Node)
+// — it always starts at `fallbackLng: 'en'`. We hydrate it here from the persisted
+// `uiLanguage` preference, which is maintained by the `i18n:changeLanguage` IPC
+// handler whenever the user changes Appearance → Language. Without this, the
+// renderer would restore its language from localStorage on every restart while
+// the main process silently stayed at English — breaking session title language,
+// the system prompt's "Preferred language" line, and the native menu.
+import { setupI18n, i18n, SUPPORTED_LANGUAGE_CODES, type LanguageCode } from '@craft-agent/shared/i18n'
+import { getPersistedUiLanguage, setPersistedUiLanguage } from '@craft-agent/shared/config'
 setupI18n()
+const persistedUiLanguage = getPersistedUiLanguage()
+if (persistedUiLanguage) {
+  void i18n.changeLanguage(persistedUiLanguage)
+}
+// Note: deferred startup log lives below where mainLog is available (after log.initialize()).
 
 // Set anonymous machine ID for Sentry user tracking (no PII — just a hash).
 // Uses hostname + homedir to produce a stable per-machine identifier.
@@ -97,7 +111,7 @@ import { handleDeepLink } from './deep-link'
 import { BrowserPaneManager } from './browser-pane-manager'
 import { OAuthFlowStore } from '@craft-agent/shared/auth'
 import { registerThumbnailScheme, registerThumbnailHandler } from './thumbnail-protocol'
-import log, { isDebugMode, mainLog, getLogFilePath, getMessagingGatewayLogFilePath, messagingGatewayLog } from './logger'
+import log, { isDebugMode, mainLog, getLogFilePath, getMessagingGatewayLogFilePath, messagingGatewayLog, autoUpdateLog } from './logger'
 import { setPerfEnabled, enableDebug } from '@craft-agent/shared/utils'
 import { registerPiModelResolver } from '@craft-agent/shared/config'
 import { getPiModelsForAuthProvider, getAllPiModels } from '@craft-agent/shared/config'
@@ -113,6 +127,13 @@ import {
 
 // Initialize electron-log for renderer process support
 log.initialize()
+
+// Diagnostic: report main-process i18n hydration result. We log here (not inline
+// at the hydration site above) because mainLog is only available after this point.
+mainLog.info('[i18n] startup hydration', {
+  persistedUiLanguage: persistedUiLanguage ?? null,
+  resolvedLanguageAfterHydration: i18n.resolvedLanguage ?? null,
+})
 
 // Enable debug/perf in dev mode (running from source)
 if (isDebugMode) {
@@ -182,7 +203,7 @@ if (isDebugMode) {
 }
 
 // Register Pi model resolver so llm-connections.ts can resolve Pi models
-// without importing @mariozechner/pi-ai (which breaks the Vite renderer build)
+// without importing @earendil-works/pi-ai (which breaks the Vite renderer build)
 registerPiModelResolver((piAuthProvider) =>
   piAuthProvider ? getPiModelsForAuthProvider(piAuthProvider) : getAllPiModels()
 )
@@ -1068,9 +1089,28 @@ app.whenReady().then(async () => {
         app.exit(0)
       })
 
-      // Language change: sync from renderer to main process and rebuild native menu
-      ipcMain.handle('i18n:changeLanguage', async (_event, lang: string) => {
-        i18n.changeLanguage(lang)
+      // Language change: sync from renderer to main process, persist, and rebuild native menu.
+      // Persistence here is what lets the next app launch hydrate main's i18n correctly —
+      // see the `getPersistedUiLanguage()` block at the top of this file.
+      ipcMain.handle('i18n:changeLanguage', async (_event, lang: unknown) => {
+        const previousResolved = i18n.resolvedLanguage ?? null
+        if (typeof lang !== 'string' || !SUPPORTED_LANGUAGE_CODES.includes(lang as LanguageCode)) {
+          // Defense-in-depth: renderer guarantees a supported code, but if a renegade
+          // caller hands us garbage we drop it silently rather than poison i18n state.
+          mainLog.warn('[i18n] changeLanguage IPC rejected — unsupported code', {
+            incoming: lang,
+            previousResolved,
+          })
+          return
+        }
+        const code = lang as LanguageCode
+        await i18n.changeLanguage(code)
+        setPersistedUiLanguage(code)
+        mainLog.info('[i18n] changeLanguage IPC applied', {
+          incoming: code,
+          previousResolved,
+          newResolved: i18n.resolvedLanguage ?? null,
+        })
         const { rebuildMenu } = await import('./menu')
         await rebuildMenu()
       })
@@ -1333,13 +1373,22 @@ app.on('before-quit', async (event) => {
     } else {
       captureAndSaveWindowState('before-quit')
     }
-    // Diagnostic correlation with installUpdate's [update-flow] log.
-    mainLog.info('[update-flow] before-quit save', {
+    // Diagnostic correlation with installUpdate's [update-flow] log. During an
+    // update-quit, record it to the dedicated always-on auto-update log (#891)
+    // so the install/quit handoff is diagnosable in production; normal quits
+    // stay on the debug-only main log.
+    const isUpdateQuit = isUpdating()
+    const beforeQuitSave = {
       windowCount: windows.length,
       electronWindowCount: BrowserWindow.getAllWindows().length,
-      isUpdating: isUpdating(),
-      reason: isUpdating() ? 'update-quit' : 'user-quit',
-    })
+      isUpdating: isUpdateQuit,
+      reason: isUpdateQuit ? 'update-quit' : 'user-quit',
+    }
+    if (isUpdateQuit) {
+      autoUpdateLog.info('before-quit save', beforeQuitSave)
+    } else {
+      mainLog.info('[update-flow] before-quit save', beforeQuitSave)
+    }
   }
 
   // Flush all pending session writes before quitting
